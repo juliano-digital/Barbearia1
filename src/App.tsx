@@ -1,6 +1,12 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import BookingModal from "./BookingModal";
+import AdminPage from "./AdminPage";
+import CustomerHistoryPage from "./CustomerHistoryPage";
+
+const BookingSuccessPage = lazy(() => import("./BookingSuccessPage"));
 
 const services = [
   {
@@ -73,7 +79,7 @@ const questions = [
   {
     question: "Posso escolher o profissional?",
     answer:
-      "Claro. Selecione seu profissional ao solicitar o horário e faremos o possível para atender à sua preferência.",
+      "No momento, os horários são organizados pela disponibilidade da equipe. Se tiver uma preferência, conte para a gente pelo WhatsApp após confirmar.",
   },
   {
     question: "Onde fica a Barbearia Brasa?",
@@ -106,11 +112,9 @@ function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="eyebrow"><span />{children}</p>;
 }
 
-function App() {
+function SiteApp() {
   const [menuOpen, setMenuOpen] = useState(false);
-  const [formMessage, setFormMessage] = useState(
-    "Protótipo visual: conecte este formulário ao WhatsApp ou à sua agenda para receber solicitações.",
-  );
+  const [bookingOpen, setBookingOpen] = useState(false);
 
   useEffect(() => {
     gsap.registerPlugin(ScrollTrigger);
@@ -158,16 +162,10 @@ function App() {
     return () => motionMedia.revert();
   }, []);
 
-  function handleBookingSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setFormMessage(
-      "Seus dados foram validados. Para receber solicitações, conecte este protótipo à agenda ou ao WhatsApp da barbearia.",
-    );
-  }
-
   return (
     <>
       <a className="skip-link" href="#conteudo">Pular para o conteúdo</a>
+      <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} />
 
       <header className="site-header">
         <Wordmark />
@@ -336,21 +334,20 @@ function App() {
             <p>Escolha o serviço e deixe seu contato. A gente combina o melhor horário com você.</p>
             <div className="booking-detail"><span aria-hidden="true">◷</span><span>Atendimento com hora marcada<br /><strong>Horários sob disponibilidade</strong></span></div>
           </div>
-          <form className="booking-form" id="booking-form" data-reveal onSubmit={handleBookingSubmit}>
-            <label htmlFor="name">Seu nome</label>
-            <input id="name" name="name" type="text" placeholder="Como podemos te chamar?" autoComplete="name" required />
-            <label htmlFor="phone">WhatsApp</label>
-            <input id="phone" name="phone" type="tel" placeholder="(11) 99999-9999" autoComplete="tel" required />
-            <label htmlFor="service">O que você quer fazer?</label>
-            <select id="service" name="service" required defaultValue="">
-              <option value="" disabled>Escolha um serviço</option>
-              <option value="Corte masculino">Corte masculino — R$ 65</option>
-              <option value="Barba completa">Barba completa — R$ 50</option>
-              <option value="Corte + barba">Corte + barba — R$ 105</option>
-            </select>
-            <button className="button booking-form__submit" type="submit">Solicitar meu horário <span aria-hidden="true">↗</span></button>
-            <p className="booking-form__note" id="form-message" aria-live="polite">{formMessage}</p>
-          </form>
+          <div className="booking-form" id="booking-form" data-reveal>
+            <p className="booking-form__intro">Escolha o serviço, o dia e o horário que combinam com você.</p>
+            <button
+              className="button booking-form__submit"
+              type="button"
+              onClick={() => setBookingOpen(true)}
+            >
+              Solicitar meu horário <span aria-hidden="true">↗</span>
+            </button>
+            <p className="booking-form__note">Disponibilidade atualizada direto na agenda da Brasa.</p>
+            <a className="booking-form__history-link" href="/minha-conta">
+              Já agendou? Consulte seu histórico →
+            </a>
+          </div>
         </section>
       </main>
 
@@ -358,10 +355,30 @@ function App() {
         <Wordmark footer />
         <p>O seu estilo. Sem atalhos.</p>
         <a href="#inicio">VOLTAR AO TOPO ↑</a>
+        <a className="site-footer__admin" href="/admin">ÁREA DA BARBEARIA</a>
         <small>© {new Date().getFullYear()} BRASA BARBEARIA · FEITO COM CAPRICHO.</small>
       </footer>
     </>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <Routes>
+        <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="/confirmacao" element={<CustomerHistoryPage />} />
+        <Route path="/minha-conta" element={<CustomerHistoryPage />} />
+        <Route
+          path="/agendamento/comprovante/:id"
+          element={
+            <Suspense fallback={<main className="grid min-h-screen place-items-center">Carregando comprovante...</main>}>
+              <BookingSuccessPage />
+            </Suspense>
+          }
+        />
+        <Route path="*" element={<SiteApp />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}

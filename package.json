@@ -9,9 +9,15 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.117.3",
+    "date-fns": "^4.4.0",
+    "framer-motion": "^14.1.0",
     "gsap": "^3.15.0",
+    "lucide-react": "^1.54.0",
     "react": "^19.3.0",
-    "react-dom": "^19.3.0"
+    "react-day-picker": "^10.0.2",
+    "react-dom": "^19.3.0",
+    "react-router-dom": "^7.18.4"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
