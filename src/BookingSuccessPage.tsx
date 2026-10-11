@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useLocation, useParams } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
@@ -38,9 +38,23 @@ function parseBooking(value: unknown): Booking | null {
 
 export default function BookingSuccessPage() {
   const { id = "" } = useParams<{ id: string }>();
+  const location = useLocation();
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const additionalBookingCount =
+    location.state &&
+    typeof location.state === "object" &&
+    "additionalBookingCount" in location.state &&
+    typeof location.state.additionalBookingCount === "number"
+      ? location.state.additionalBookingCount
+      : 0;
+  const reminderStorageFailed = Boolean(
+    location.state &&
+    typeof location.state === "object" &&
+    "reminderStorageFailed" in location.state &&
+    location.state.reminderStorageFailed === true,
+  );
 
   useEffect(() => {
     let active = true;
@@ -165,11 +179,21 @@ export default function BookingSuccessPage() {
         <p className="mt-5 text-xs text-[#a9a29a]">
           Código do agendamento: {booking.id.slice(0, 8).toUpperCase()}
         </p>
+        {reminderStorageFailed && (
+          <p className="mt-3 text-sm text-[#e3a343]" role="status">
+            Este navegador não conseguiu guardar os avisos dos agendamentos na página inicial.
+          </p>
+        )}
+        {!reminderStorageFailed && additionalBookingCount > 0 && (
+          <p className="mt-3 text-sm text-[#a9a29a]" role="status">
+            Os outros {additionalBookingCount} comprovante(s) ficam disponíveis nos avisos da página inicial.
+          </p>
+        )}
         <Link
-          className="mt-8 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-[#c9822b] bg-[#c9822b] px-6 font-semibold text-[#17120c] transition hover:-translate-y-0.5 hover:bg-[#e3a343]"
+          className="mt-8 inline-flex min-h-12 items-center justify-center gap-3 rounded-xl border border-[#c9822b] bg-[#c9822b] px-6 font-semibold text-[#17120c] transition hover:-translate-y-0.5 hover:bg-[#e3a343] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#e3a343]"
           to="/"
         >
-          Voltar para o início <span aria-hidden="true">↗</span>
+          <ArrowLeft aria-hidden="true" className="size-4" /> Voltar ao início
         </Link>
       </motion.section>
     </main>

@@ -1,3 +1,9 @@
+export function formatBrazilianPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "").slice(0, 11);
+  if (digits.length <= 2) return digits ? `(${digits}${digits.length === 2 ? ")" : ""}` : "";
+  return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+}
+
 export function toBrazilianE164(phone: string) {
   const digits = phone.replace(/\D/g, "");
   if (phone.trim().startsWith("+") && digits.length >= 10 && digits.length <= 15) {

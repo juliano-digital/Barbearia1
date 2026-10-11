@@ -1,10 +1,14 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { format, isValid, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
 import BookingModal from "./BookingModal";
 import AdminPage from "./AdminPage";
 import CustomerHistoryPage from "./CustomerHistoryPage";
+import { LAST_BOOKING_STORAGE_KEY, readBookingIds } from "./lib/bookingStorage";
+import { getSupabaseClient } from "./lib/supabase";
 
 const BookingSuccessPage = lazy(() => import("./BookingSuccessPage"));
 
@@ -112,6 +116,105 @@ function Eyebrow({ children }: { children: ReactNode }) {
   return <p className="eyebrow"><span />{children}</p>;
 }
 
+type HomeBooking = {
+  id: string;
+  servico: string;
+  data_agendamento: string;
+  horario_agendamento: string;
+};
+
+function BookingNotice() {
+  const [bookings, setBookings] = useState<HomeBooking[]>([]);
+  const [loadError, setLoadError] = useState(false);
+  const [retry, setRetry] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+
+    async function loadBooking() {
+      setLoadError(false);
+      try {
+        const bookingIds = readBookingIds(window.localStorage.getItem(LAST_BOOKING_STORAGE_KEY));
+        if (!bookingIds.length) {
+          if (active) setBookings([]);
+          return;
+        }
+
+        const { data, error } = await getSupabaseClient()
+          .from("agendamentos")
+          .select("id, servico, data_agendamento, horario_agendamento, status")
+          .in("id", bookingIds);
+        if (error) throw error;
+
+        if (active) {
+          setBookings(data
+            .filter((booking) =>
+              booking.status === "confirmado" &&
+              typeof booking.id === "string" &&
+              typeof booking.servico === "string" &&
+              typeof booking.data_agendamento === "string" &&
+              typeof booking.horario_agendamento === "string",
+            )
+            .map((booking) => ({
+              id: booking.id,
+              servico: booking.servico,
+              data_agendamento: booking.data_agendamento,
+              horario_agendamento: booking.horario_agendamento,
+            })));
+        }
+      } catch {
+        if (active) setLoadError(true);
+      }
+    }
+
+    void loadBooking();
+    return () => {
+      active = false;
+    };
+  }, [retry]);
+
+  if (loadError) {
+    return (
+      <div className="booking-notice booking-notice--error" role="alert">
+        <span>Não foi possível carregar seu agendamento.</span>
+        <button type="button" onClick={() => setRetry((count) => count + 1)}>
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
+  const validBookings = bookings.filter((booking) => isValid(parseISO(booking.data_agendamento)));
+  if (!validBookings.length) return null;
+
+  return (
+    <div className="booking-notices" aria-label="Seus agendamentos confirmados">
+      {validBookings.map((booking, index) => {
+        const date = parseISO(booking.data_agendamento);
+        return (
+          <Link
+            className="booking-notice"
+            key={booking.id}
+            to={`/agendamento/comprovante/${encodeURIComponent(booking.id)}`}
+            aria-label={`Ver comprovante do agendamento: ${booking.servico}, ${format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}, às ${booking.horario_agendamento.slice(0, 5)}`}
+          >
+            <span className="booking-notice__icon" aria-hidden="true">✓</span>
+            <span className="booking-notice__content">
+              <strong>
+                {validBookings.length > 1 ? `Agendamento ${index + 1} confirmado` : "Seu agendamento está confirmado"}
+              </strong>
+              <span>{booking.servico}</span>
+              <span className="booking-notice__details">
+                {format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })} · {booking.horario_agendamento.slice(0, 5)}
+              </span>
+            </span>
+            <span className="booking-notice__action" aria-hidden="true">Ver comprovante ↗</span>
+          </Link>
+        );
+      })}
+    </div>
+  );
+}
+
 function SiteApp() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -217,6 +320,7 @@ function SiteApp() {
               <a className="button" href="#agendamento">Reserve seu horário <span aria-hidden="true">↗</span></a>
               <a className="text-link" href="#servicos">Explore a barbearia <span aria-hidden="true">↓</span></a>
             </div>
+            <BookingNotice />
           </div>
           <div className="hero__caption"><span>01 / 03</span><span>PRECISÃO EM CADA DETALHE</span></div>
           <a className="hero__scroll" href="#servicos" aria-label="Rolar para os serviços"><span /> ROLE PARA DESCOBRIR</a>
