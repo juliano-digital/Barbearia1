@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { getSupabaseClient, isSupabaseConfigured } from "./lib/supabase";
@@ -16,7 +17,6 @@ type Booking = {
 
 const demoEmail = "demo@brasa.com";
 const demoPassword = "brasa123";
-const isDemoRoute = window.location.pathname.replace(/\/+$/, "") === "/admin/demo";
 
 function dateOffsetIso(daysFromToday: number) {
   const date = new Date();
@@ -72,6 +72,8 @@ function friendlyError(error: unknown) {
 }
 
 export default function AdminPage() {
+  const location = useLocation();
+  const isDemoRoute = location.pathname.replace(/\/+$/, "") === "/admin/demo";
   const [email] = useState(demoEmail);
   const [password, setPassword] = useState(demoPassword);
   const [loading, setLoading] = useState(!isDemoRoute);
@@ -114,11 +116,13 @@ export default function AdminPage() {
   useEffect(() => {
     if (isDemoRoute) {
       setBookings(demoBookings);
+      setDemoActive(false);
+      setError("");
       setLoading(false);
       return;
     }
     void loadBookings();
-  }, []);
+  }, [isDemoRoute]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -141,10 +145,10 @@ export default function AdminPage() {
   return (
     <main className="admin-page">
       <header className="admin-header">
-        <a className="wordmark" href="/" aria-label="Brasa Barbearia — página inicial">
+        <Link className="wordmark" to="/" aria-label="Brasa Barbearia — página inicial">
           <span className="wordmark__icon" aria-hidden="true">B.</span>
           <span className="wordmark__text">BRASA<span>BARBEARIA</span></span>
-        </a>
+        </Link>
         {demoActive && (
           <button
             className="admin-logout"
@@ -192,7 +196,7 @@ export default function AdminPage() {
           </p>
           {error && <p className="admin-error" role="alert">{error}</p>}
           {!isSupabaseConfigured() ? (
-            <a className="admin-demo-link" href="/admin/demo">Ver demonstração com dados fictícios</a>
+            <Link className="admin-demo-link" to="/admin/demo">Ver demonstração com dados fictícios</Link>
           ) : (
             <button className="button admin-submit" type="button" onClick={() => void loadBookings()}>
               Tentar novamente

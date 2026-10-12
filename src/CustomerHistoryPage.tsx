@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Link, useLocation } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { Session } from "@supabase/supabase-js";
@@ -14,8 +15,6 @@ type Booking = {
   horario_agendamento: string;
   status: string;
 };
-
-const bookingId = new URLSearchParams(window.location.search).get("agendamento");
 
 function canCancelBooking(booking: Booking, now: number) {
   if (booking.status !== "confirmado") return false;
@@ -51,6 +50,8 @@ function friendlyCancellationError(error: unknown) {
 }
 
 export default function CustomerHistoryPage() {
+  const location = useLocation();
+  const bookingId = new URLSearchParams(location.search).get("agendamento");
   const [session, setSession] = useState<Session | null>(null);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [phone, setPhone] = useState("");
@@ -223,10 +224,10 @@ export default function CustomerHistoryPage() {
   return (
     <main className="customer-page">
       <header className="admin-header">
-        <a className="wordmark" href="/" aria-label="Brasa Barbearia — página inicial">
+        <Link className="wordmark" to="/" aria-label="Brasa Barbearia — página inicial">
           <span className="wordmark__icon" aria-hidden="true">B.</span>
           <span className="wordmark__text">BRASA<span>BARBEARIA</span></span>
-        </a>
+        </Link>
         {session && (
           <button className="admin-logout" type="button" onClick={() => void handleSignOut()}>
             Sair
@@ -279,7 +280,7 @@ export default function CustomerHistoryPage() {
                     ? "Cancelar agendamento"
                     : "Prazo para cancelamento encerrado"}
             </button>
-            <a className="button customer-primary-link" href="/minha-conta">Ver meu histórico completo</a>
+            <Link className="button customer-primary-link" to="/minha-conta">Ver meu histórico completo</Link>
           </div>
         ) : (
           <>

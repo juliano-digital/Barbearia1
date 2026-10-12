@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { BrowserRouter, Link, Route, Routes } from "react-router-dom";
+import { HashRouter, Link, Route, Routes } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import gsap from "gsap";
@@ -448,9 +448,9 @@ function SiteApp() {
               Solicitar meu horário <span aria-hidden="true">↗</span>
             </button>
             <p className="booking-form__note">Disponibilidade atualizada direto na agenda da Brasa.</p>
-            <a className="booking-form__history-link" href="/minha-conta">
+            <Link className="booking-form__history-link" to="/minha-conta">
               Já agendou? Consulte seu histórico →
-            </a>
+            </Link>
           </div>
         </section>
       </main>
@@ -459,7 +459,7 @@ function SiteApp() {
         <Wordmark footer />
         <p>O seu estilo. Sem atalhos.</p>
         <a href="#inicio">VOLTAR AO TOPO ↑</a>
-        <a className="site-footer__admin" href="/admin">ÁREA DA BARBEARIA</a>
+        <Link className="site-footer__admin" to="/admin">ÁREA DA BARBEARIA</Link>
         <small>© {new Date().getFullYear()} BRASA BARBEARIA · FEITO COM CAPRICHO.</small>
       </footer>
     </>
@@ -468,7 +468,7 @@ function SiteApp() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <Routes>
         <Route path="/admin/*" element={<AdminPage />} />
         <Route path="/confirmacao" element={<CustomerHistoryPage />} />
@@ -483,6 +483,6 @@ export default function App() {
         />
         <Route path="*" element={<SiteApp />} />
       </Routes>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
