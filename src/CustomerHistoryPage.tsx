@@ -14,6 +14,7 @@ type Booking = {
   data_agendamento: string;
   horario_agendamento: string;
   status: string;
+  cancellation_reason: string | null;
 };
 
 function canCancelBooking(booking: Booking, now: number) {
@@ -61,6 +62,8 @@ export default function CustomerHistoryPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [cancellingId, setCancellingId] = useState("");
+  const [cancellationTarget, setCancellationTarget] = useState<Booking | null>(null);
+  const [cancellationReason, setCancellationReason] = useState("");
   const [now, setNow] = useState(Date.now());
   const [cancellationError, setCancellationError] = useState("");
   const [error, setError] = useState("");
@@ -71,7 +74,7 @@ export default function CustomerHistoryPage() {
     try {
       const { data, error: queryError } = await getSupabaseClient()
         .from("agendamentos")
-        .select("id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento, status")
+        .select("id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento, status, cancellation_reason")
         .eq("user_id", userId)
         .order("data_agendamento", { ascending: false })
         .order("horario_agendamento", { ascending: false });
@@ -188,16 +191,29 @@ export default function CustomerHistoryPage() {
     }
   }
 
-  async function handleCancelBooking(booking: Booking) {
+  function openCancellationDialog(booking: Booking) {
     if (!session || !canCancelBooking(booking, Date.now())) return;
-    if (!window.confirm("Deseja cancelar este agendamento?")) return;
+    setCancellationTarget(booking);
+    setCancellationReason("");
+    setCancellationError("");
+  }
+
+  async function handleCancelBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const booking = cancellationTarget;
+    const reason = cancellationReason.trim();
+    if (!session || !booking || !canCancelBooking(booking, Date.now())) return;
+    if (reason.length < 5) {
+      setCancellationError("Explique o motivo do cancelamento com pelo menos 5 caracteres.");
+      return;
+    }
 
     setCancellingId(booking.id);
     setCancellationError("");
     try {
       const { data, error: cancelError } = await getSupabaseClient()
         .from("agendamentos")
-        .update({ status: "cancelado" })
+        .update({ status: "cancelado", cancellation_reason: reason })
         .eq("id", booking.id)
         .eq("user_id", session.user.id)
         .eq("status", "confirmado")
@@ -210,8 +226,10 @@ export default function CustomerHistoryPage() {
         return;
       }
       setBookings((current) => current.map((item) =>
-        item.id === booking.id ? { ...item, status: "cancelado" } : item,
+        item.id === booking.id ? { ...item, status: "cancelado", cancellation_reason: reason } : item,
       ));
+      setCancellationTarget(null);
+      setCancellationReason("");
     } catch (cancelError) {
       setCancellationError(friendlyCancellationError(cancelError));
     } finally {
@@ -261,6 +279,9 @@ export default function CustomerHistoryPage() {
               <div><dt>Horário</dt><dd>{selectedBooking.horario_agendamento.slice(0, 5)}</dd></div>
               <div><dt>WhatsApp</dt><dd>{selectedBooking.whatsapp}</dd></div>
               <div><dt>Status</dt><dd>{formatBookingStatus(selectedBooking.status)}</dd></div>
+              {selectedBooking.cancellation_reason && (
+                <div><dt>Motivo do cancelamento</dt><dd>{selectedBooking.cancellation_reason}</dd></div>
+              )}
             </dl>
             {cancellationError && <p className="admin-error" role="alert">{cancellationError}</p>}
             <p className="customer-cancellation-note">
@@ -270,7 +291,7 @@ export default function CustomerHistoryPage() {
               className="customer-cancel-button"
               type="button"
               disabled={!canCancelBooking(selectedBooking, now) || cancellingId === selectedBooking.id}
-              onClick={() => void handleCancelBooking(selectedBooking)}
+              onClick={() => openCancellationDialog(selectedBooking)}
             >
               {cancellingId === selectedBooking.id
                 ? "Cancelando..."
@@ -325,7 +346,7 @@ export default function CustomerHistoryPage() {
                         className="customer-cancel-button customer-cancel-button--compact"
                         type="button"
                         disabled={cancellingId === booking.id}
-                        onClick={() => void handleCancelBooking(booking)}
+                        onClick={() => openCancellationDialog(booking)}
                       >
                         {cancellingId === booking.id ? "Cancelando..." : "Cancelar"}
                       </button>
@@ -386,6 +407,68 @@ export default function CustomerHistoryPage() {
           </form>
         )}
       </section>
+      {cancellationTarget && (
+        <div
+          className="customer-cancel-dialog-backdrop"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !cancellingId) {
+              setCancellationTarget(null);
+              setCancellationError("");
+            }
+          }}
+        >
+          <section
+            className="customer-cancel-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="customer-cancel-title"
+            aria-describedby="customer-cancel-description"
+          >
+            <p className="eyebrow"><span /> CANCELAMENTO</p>
+            <h2 id="customer-cancel-title">Por que precisa cancelar?</h2>
+            <p id="customer-cancel-description">
+              Conte brevemente o motivo. A solicitação só será enviada depois que você informar essa explicação.
+            </p>
+            <form onSubmit={(event) => void handleCancelBooking(event)}>
+              <label htmlFor="customer-cancel-reason">Motivo do cancelamento</label>
+              <textarea
+                id="customer-cancel-reason"
+                value={cancellationReason}
+                onChange={(event) => setCancellationReason(event.target.value.slice(0, 500))}
+                placeholder="Escreva o motivo (mínimo de 5 caracteres)"
+                minLength={5}
+                maxLength={500}
+                rows={4}
+                required
+                autoFocus
+                disabled={Boolean(cancellingId)}
+              />
+              <span className="customer-cancel-dialog__count">{cancellationReason.length}/500</span>
+              {cancellationError && <p className="admin-error" role="alert">{cancellationError}</p>}
+              <div className="customer-cancel-dialog__actions">
+                <button
+                  className="customer-cancel-dialog__back"
+                  type="button"
+                  disabled={Boolean(cancellingId)}
+                  onClick={() => {
+                    setCancellationTarget(null);
+                    setCancellationError("");
+                  }}
+                >
+                  Voltar
+                </button>
+                <button
+                  className="customer-cancel-button"
+                  type="submit"
+                  disabled={Boolean(cancellingId) || cancellationReason.trim().length < 5}
+                >
+                  {cancellingId === cancellationTarget.id ? "Enviando..." : "Confirmar cancelamento"}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }

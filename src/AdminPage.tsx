@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Trash2 } from "lucide-react";
 import { getSupabaseClient, isSupabaseConfigured } from "./lib/supabase";
 
 type Booking = {
@@ -62,27 +63,32 @@ const demoBookings: Booking[] = [
 ];
 
 function friendlyError(error: unknown) {
-  if (error instanceof Error && error.message.includes("ainda não está configurado")) {
-    return error.message;
-  }
   if (error && typeof error === "object" && "message" in error) {
-    return String(error.message);
+    const message = String(error.message);
+    if (message) return message;
   }
+  if (error instanceof Error) return error.message;
   return "Não foi possível carregar os agendamentos. Verifique a conexão e tente novamente.";
 }
 
 export default function AdminPage() {
   const location = useLocation();
   const isDemoRoute = location.pathname.replace(/\/+$/, "") === "/admin/demo";
-  const [email] = useState(demoEmail);
-  const [password, setPassword] = useState(demoPassword);
+  const [email, setEmail] = useState(isDemoRoute ? demoEmail : "");
+  const [password, setPassword] = useState(isDemoRoute ? demoPassword : "");
   const [loading, setLoading] = useState(!isDemoRoute);
+  const [authChecking, setAuthChecking] = useState(!isDemoRoute);
+  const [adminAuthorized, setAdminAuthorized] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [demoActive, setDemoActive] = useState(false);
   const [loadFailed, setLoadFailed] = useState(false);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [error, setError] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
+  const [dateFilter, setDateFilter] = useState("");
+  const [timeFilter, setTimeFilter] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [deletingId, setDeletingId] = useState("");
 
   async function loadBookings() {
     if (!isSupabaseConfigured()) {
@@ -117,30 +123,163 @@ export default function AdminPage() {
     if (isDemoRoute) {
       setBookings(demoBookings);
       setDemoActive(false);
+      setAdminAuthorized(false);
       setError("");
       setLoading(false);
+      setAuthChecking(false);
       return;
     }
-    void loadBookings();
+
+    let active = true;
+    async function restoreAdminSession() {
+      try {
+        const { data, error: sessionError } = await getSupabaseClient().auth.getSession();
+        if (sessionError) throw sessionError;
+        if (!data.session) {
+          if (active) setLoading(false);
+          return;
+        }
+
+        const { data: admin, error: adminError } = await getSupabaseClient()
+          .from("admin_users")
+          .select("user_id")
+          .eq("user_id", data.session.user.id)
+          .maybeSingle();
+        if (adminError) throw adminError;
+        if (!admin) {
+          await getSupabaseClient().auth.signOut();
+          if (active) {
+            setError("Esta conta não está cadastrada como administradora. Peça ao responsável para adicioná-la em public.admin_users.");
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (active) {
+          setAdminAuthorized(true);
+          await loadBookings();
+        }
+      } catch (sessionError) {
+        if (active) {
+          setError(friendlyError(sessionError));
+          setLoading(false);
+        }
+      } finally {
+        if (active) setAuthChecking(false);
+      }
+    }
+
+    void restoreAdminSession();
+    return () => {
+      active = false;
+    };
   }, [isDemoRoute]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSubmitting(true);
     setError("");
-    if (email.trim() === demoEmail && password === demoPassword) {
+    if (isDemoRoute && email.trim() === demoEmail && password === demoPassword) {
       setDemoActive(true);
       setBookings(demoBookings);
       setPassword("");
-    } else {
+      setSubmitting(false);
+      return;
+    }
+
+    if (isDemoRoute) {
       setError("Use o e-mail e a senha fictícios indicados para acessar a demonstração.");
+      setSubmitting(false);
+      return;
+    }
+
+    try {
+      const { data, error: signInError } = await getSupabaseClient().auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      if (signInError || !data.user) {
+        throw new Error("E-mail ou senha inválidos.");
+      }
+
+      const { data: admin, error: adminError } = await getSupabaseClient()
+        .from("admin_users")
+        .select("user_id")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      if (adminError) throw adminError;
+      if (!admin) {
+        await getSupabaseClient().auth.signOut();
+        throw new Error("Esta conta não está cadastrada como administradora. Peça ao responsável para adicioná-la em public.admin_users.");
+      }
+
+      setAdminAuthorized(true);
+      setPassword("");
+      await loadBookings();
+    } catch (loginError) {
+      setError(friendlyError(loginError));
     }
     setSubmitting(false);
   }
 
-  const visibleBookings = statusFilter === "todos"
-    ? bookings
-    : bookings.filter((booking) => booking.status === statusFilter);
+  async function handleSignOut() {
+    try {
+      const { error: signOutError } = await getSupabaseClient().auth.signOut();
+      if (signOutError) throw signOutError;
+      setAdminAuthorized(false);
+      setBookings([]);
+      setPassword("");
+      setError("");
+    } catch (signOutError) {
+      setError(friendlyError(signOutError));
+    }
+  }
+
+  async function handleDeleteBooking(booking: Booking) {
+    const formattedDate = format(parseISO(booking.data_agendamento), "dd/MM/yyyy", { locale: ptBR });
+    if (!window.confirm(`Excluir o agendamento de ${booking.nome_cliente} em ${formattedDate} às ${booking.horario_agendamento.slice(0, 5)}? Esta ação não pode ser desfeita.`)) {
+      return;
+    }
+
+    setActionError("");
+    setDeletingId(booking.id);
+    try {
+      if (demoActive) {
+        setBookings((current) => current.filter((item) => item.id !== booking.id));
+        return;
+      }
+
+      const { data, error: deleteError } = await getSupabaseClient()
+        .from("agendamentos")
+        .delete()
+        .eq("id", booking.id)
+        .select("id");
+
+      if (deleteError) throw deleteError;
+      if (!data?.length) {
+        throw new Error("O banco não excluiu o agendamento. Confirme que sua conta está autorizada como administradora.");
+      }
+      setBookings((current) => current.filter((item) => item.id !== booking.id));
+    } catch (deleteError) {
+      const message = deleteError && typeof deleteError === "object" && "message" in deleteError
+        ? String(deleteError.message).toLowerCase()
+        : "";
+      setActionError(
+        message.includes("permission") || message.includes("row-level security")
+          ? "A exclusão foi bloqueada pelas permissões do banco. Cadastre sua conta em public.admin_users e execute o SQL atualizado em supabase/agendamentos.sql."
+          : friendlyError(deleteError),
+      );
+    } finally {
+      setDeletingId("");
+    }
+  }
+
+  const visibleBookings = bookings.filter((booking) =>
+    (statusFilter === "todos" || booking.status === statusFilter) &&
+    (!dateFilter || booking.data_agendamento === dateFilter) &&
+    (!timeFilter || booking.horario_agendamento.slice(0, 5) === timeFilter),
+  );
+  const hasActiveFilters = statusFilter !== "todos" || dateFilter !== "" || timeFilter !== "";
 
   return (
     <main className="admin-page">
@@ -149,23 +288,23 @@ export default function AdminPage() {
           <span className="wordmark__icon" aria-hidden="true">B.</span>
           <span className="wordmark__text">BRASA<span>BARBEARIA</span></span>
         </Link>
-        {demoActive && (
+        {(demoActive || adminAuthorized) && (
           <button
             className="admin-logout"
             type="button"
-            onClick={() => {
-              setDemoActive(false);
-              setPassword(demoPassword);
-            }}
+            onClick={() => demoActive
+              ? (setDemoActive(false), setPassword(demoPassword))
+              : void handleSignOut()}
           >
-            Sair da demonstração
+            {demoActive ? "Sair da demonstração" : "Sair"}
           </button>
         )}
       </header>
 
-      {loading ? (
+      {loading || authChecking ? (
         <div className="admin-loading" role="status">
-          <span className="booking-spinner" /> Carregando agendamentos...
+          <span className="booking-spinner" />
+          {authChecking ? "Verificando acesso..." : "Carregando agendamentos..."}
         </div>
       ) : isDemoRoute && !demoActive ? (
         <section className="admin-login">
@@ -186,22 +325,48 @@ export default function AdminPage() {
             </button>
           </form>
         </section>
+      ) : !isDemoRoute && !adminAuthorized ? (
+        <section className="admin-login">
+          <p className="eyebrow"><span /> ACESSO ADMINISTRATIVO</p>
+          <h1>Painel da barbearia</h1>
+          <p>Entre com a conta de administrador cadastrada no Supabase para consultar e gerenciar os agendamentos.</p>
+          <form onSubmit={(event) => void handleLogin(event)}>
+            <label htmlFor="admin-email">E-mail</label>
+            <input
+              id="admin-email"
+              type="email"
+              autoComplete="username"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              required
+            />
+            <label htmlFor="admin-password">Senha</label>
+            <input
+              id="admin-password"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              required
+            />
+            {error && <p className="admin-error" role="alert">{error}</p>}
+            <button className="button admin-submit" type="submit" disabled={submitting}>
+              {submitting ? "Verificando..." : "Entrar"}
+            </button>
+          </form>
+          <Link className="admin-demo-link" to="/admin/demo">Ver demonstração com dados fictícios</Link>
+        </section>
       ) : loadFailed ? (
         <section className="admin-login" aria-live="polite">
           <p className="eyebrow"><span /> ERRO AO CARREGAR</p>
           <h1>Painel real indisponível</h1>
           <p>
-            Configure as chaves do Supabase e habilite a leitura pública da tabela
-            `agendamentos` pelo script SQL do projeto.
+            Verifique a configuração e as permissões do banco para consultar os agendamentos.
           </p>
           {error && <p className="admin-error" role="alert">{error}</p>}
-          {!isSupabaseConfigured() ? (
-            <Link className="admin-demo-link" to="/admin/demo">Ver demonstração com dados fictícios</Link>
-          ) : (
-            <button className="button admin-submit" type="button" onClick={() => void loadBookings()}>
-              Tentar novamente
-            </button>
-          )}
+          <button className="button admin-submit" type="button" onClick={() => void loadBookings()}>
+            Tentar novamente
+          </button>
         </section>
       ) : (
         <section className="admin-dashboard">
@@ -237,11 +402,49 @@ export default function AdminPage() {
             )}
           </div>
 
+          <div className="admin-booking-filters" aria-label="Filtros de agendamentos">
+            <label className="admin-filter">
+              <span>Data</span>
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(event) => setDateFilter(event.target.value)}
+              />
+            </label>
+            <label className="admin-filter">
+              <span>Horário</span>
+              <input
+                type="time"
+                value={timeFilter}
+                onChange={(event) => setTimeFilter(event.target.value)}
+              />
+            </label>
+            {hasActiveFilters && (
+              <button
+                className="admin-filter-clear"
+                type="button"
+                onClick={() => {
+                  setStatusFilter("todos");
+                  setDateFilter("");
+                  setTimeFilter("");
+                }}
+              >
+                Limpar filtros
+              </button>
+            )}
+          </div>
+
+          {actionError && <p className="admin-error" role="alert">{actionError}</p>}
+
           {visibleBookings.length === 0 ? (
             <div className="admin-empty">
               <span aria-hidden="true">◷</span>
-              <h2>Nenhum agendamento por aqui</h2>
-              <p>Quando um cliente confirmar um horário, ele aparecerá nesta lista.</p>
+              <h2>{hasActiveFilters ? "Nenhum resultado encontrado" : "Nenhum agendamento por aqui"}</h2>
+              <p>
+                {hasActiveFilters
+                  ? "Não há agendamentos para os filtros selecionados. Tente outra data ou horário."
+                  : "Quando um cliente confirmar um horário, ele aparecerá nesta lista."}
+              </p>
             </div>
           ) : (
             <div className="admin-table-wrap">
@@ -253,6 +456,7 @@ export default function AdminPage() {
                     <th>Serviço</th>
                     <th>WhatsApp</th>
                     <th>Status</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -280,6 +484,18 @@ export default function AdminPage() {
                             {booking.status}
                           </span>
                         </td>
+                        <td>
+                          <button
+                            className="admin-delete"
+                            type="button"
+                            aria-label={`Excluir agendamento de ${booking.nome_cliente}`}
+                            disabled={deletingId === booking.id}
+                            onClick={() => void handleDeleteBooking(booking)}
+                          >
+                            <Trash2 aria-hidden="true" size={15} />
+                            {deletingId === booking.id ? "Excluindo..." : "Excluir"}
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -288,7 +504,7 @@ export default function AdminPage() {
             </div>
           )}
           <p className="admin-count">
-            {visibleBookings.length} agendamento(s) exibido(s) · máximo de 300
+            {visibleBookings.length} de {bookings.length} agendamento(s) exibido(s) · máximo de 300
           </p>
         </section>
       )}

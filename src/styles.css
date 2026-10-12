@@ -1842,6 +1842,52 @@ p {
   margin: 0;
 }
 
+.admin-filter input {
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 0;
+  background: var(--color-background);
+  color: var(--color-text);
+  color-scheme: dark;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.admin-booking-filters {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: -9px 0 22px;
+  padding: 16px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+.admin-booking-filters .admin-filter {
+  min-width: 180px;
+}
+
+.admin-filter-clear {
+  min-height: 46px;
+  padding: 0 14px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+
+.admin-filter-clear:hover {
+  border-color: var(--color-primary);
+  color: var(--color-accent);
+}
+
 .admin-refresh {
   min-height: 42px;
   padding: 0 13px;
@@ -1941,6 +1987,32 @@ p {
 
 .admin-table td a {
   color: var(--color-accent);
+}
+
+.admin-delete {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 10px;
+  border: 1px solid rgb(207 91 73 / 40%);
+  background: rgb(207 91 73 / 8%);
+  color: #f0aaa0;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.68rem;
+  transition: border-color 160ms ease, background 160ms ease;
+}
+
+.admin-delete:hover:not(:disabled) {
+  border-color: #cf5b49;
+  background: rgb(207 91 73 / 17%);
+}
+
+.admin-delete:disabled {
+  cursor: progress;
+  opacity: 0.65;
 }
 
 .admin-status {
@@ -2073,6 +2145,119 @@ p {
   margin: 0;
   padding: 0 10px;
   font-size: 0.7rem;
+}
+
+.customer-cancel-dialog-backdrop {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 20px;
+  background: rgb(0 0 0 / 76%);
+}
+
+.customer-cancel-dialog {
+  width: min(100%, 500px);
+  padding: clamp(22px, 5vw, 34px);
+  border: 1px solid var(--color-border);
+  background:
+    radial-gradient(ellipse at 100% 0%, rgb(201 130 43 / 10%), transparent 45%),
+    var(--color-surface);
+  box-shadow: 0 20px 70px rgb(0 0 0 / 45%);
+}
+
+.customer-cancel-dialog h2 {
+  margin: 12px 0 8px;
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 6vw, 2.3rem);
+  font-weight: 500;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.customer-cancel-dialog > p:not(.eyebrow) {
+  margin: 0 0 20px;
+  color: var(--color-text-muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.customer-cancel-dialog form {
+  display: grid;
+}
+
+.customer-cancel-dialog label {
+  margin-bottom: 7px;
+  font-size: 0.74rem;
+  font-weight: 600;
+}
+
+.customer-cancel-dialog textarea {
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  padding: 12px 13px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.8rem;
+}
+
+.customer-cancel-dialog textarea:focus-visible {
+  border-color: var(--color-primary);
+  outline: 2px solid rgb(227 163 67 / 30%);
+  outline-offset: 2px;
+}
+
+.customer-cancel-dialog textarea::placeholder {
+  color: var(--color-text-muted);
+}
+
+.customer-cancel-dialog__count {
+  margin-top: 5px;
+  color: var(--color-text-muted);
+  font-size: 0.66rem;
+  text-align: right;
+}
+
+.customer-cancel-dialog .admin-error {
+  margin-top: 12px;
+}
+
+.customer-cancel-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.customer-cancel-dialog__actions .customer-cancel-button {
+  margin: 0;
+}
+
+.customer-cancel-dialog__back {
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.customer-cancel-dialog__back:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  color: var(--color-text);
+}
+
+.customer-cancel-dialog__back:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
 }
 
 .customer-auth-form {
@@ -2582,6 +2767,19 @@ p {
   }
 
   .admin-filter {
+    width: 100%;
+  }
+
+  .admin-booking-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .admin-booking-filters .admin-filter {
+    min-width: 0;
+  }
+
+  .admin-filter-clear {
     width: 100%;
   }
 

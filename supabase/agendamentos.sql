@@ -15,6 +15,9 @@ create table if not exists public.agendamentos (
 alter table public.agendamentos
   add column if not exists user_id uuid references auth.users(id) on delete set null;
 
+alter table public.agendamentos
+  add column if not exists cancellation_reason text;
+
 create table if not exists public.admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   created_at timestamp with time zone not null default now()
@@ -38,6 +41,19 @@ drop policy if exists "Administradores podem consultar agendamentos"
   on public.agendamentos;
 create policy "Administradores podem consultar agendamentos"
   on public.agendamentos for select
+  to authenticated
+  using (
+    exists (
+      select 1
+      from public.admin_users
+      where admin_users.user_id = (select auth.uid())
+    )
+  );
+
+drop policy if exists "Administradores podem excluir agendamentos"
+  on public.agendamentos;
+create policy "Administradores podem excluir agendamentos"
+  on public.agendamentos for delete
   to authenticated
   using (
     exists (
@@ -85,6 +101,8 @@ create policy "Clientes podem cancelar seus próprios agendamentos com antecedê
   with check (
     user_id = (select auth.uid())
     and status = 'cancelado'
+    and cancellation_reason is not null
+    and length(trim(cancellation_reason)) between 5 and 500
   );
 
 grant usage on schema public to anon, authenticated;
@@ -93,13 +111,17 @@ grant select on table public.agendamentos to anon, authenticated;
 revoke insert on table public.agendamentos from anon, authenticated;
 grant insert (user_id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento)
   on public.agendamentos to anon, authenticated;
+revoke delete on table public.agendamentos from anon, authenticated;
+grant delete on table public.agendamentos to authenticated;
 revoke update on table public.agendamentos from anon, authenticated;
-grant update (status) on public.agendamentos to authenticated;
+grant update (status, cancellation_reason) on public.agendamentos to authenticated;
 
 revoke all on public.admin_users from anon, authenticated;
 grant select (user_id) on public.admin_users to authenticated;
 
--- Cadastro opcional de administrador para futuras configurações com acesso restrito.
+-- Para habilitar o painel real:
+-- 1. Crie a conta do administrador em Supabase > Authentication > Users.
+-- 2. Insira o UUID dessa conta em public.admin_users:
 -- insert into public.admin_users (user_id)
 -- values ('UUID-DO-USUARIO-ADMIN')
 -- on conflict (user_id) do nothing;
