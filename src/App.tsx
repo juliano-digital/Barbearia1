@@ -4,6 +4,7 @@ import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import gsap from "gsap";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { MapPin, MessageCircle, Phone, Send, X } from "lucide-react";
 import BookingModal from "./BookingModal";
 import AdminPage from "./AdminPage";
 import CustomerHistoryPage from "./CustomerHistoryPage";
@@ -92,7 +93,7 @@ const questions = [
   {
     question: "Onde fica a Barbearia Brasa?",
     answer:
-      "Endereço e horários de funcionamento devem ser adicionados aqui pela barbearia antes da publicação do site.",
+      "O endereço ilustrativo da Barbearia Brasa é Rua das Navalhas, 123 — Centro, Canoas — RS.",
   },
 ];
 
@@ -260,6 +261,127 @@ function BookingNotice() {
   );
 }
 
+type ChatMessage = {
+  id: number;
+  author: "assistant" | "visitor";
+  text: string;
+};
+
+const chatWelcomeMessage =
+  "Olá! Estou em formato de protótipo e sei somente estas informações: a Barbearia Brasa é uma barbearia tradicional focada em atendimento de excelência, corte clássico e barba à navalha; fica na Avenida Navalha, Canoas — RS; funciona de segunda a sábado, das 09:00 às 20:00.";
+
+function getChatReply(question: string) {
+  const normalizedQuestion = question
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+
+  if (/horario|abre|fecha|funciona|atendimento/.test(normalizedQuestion)) {
+    return "Funcionamos de segunda a sábado, das 09:00 às 20:00.";
+  }
+  if (/onde|endereco|local|fica|localizacao/.test(normalizedQuestion)) {
+    return "A Barbearia Brasa fica na Avenida Navalha, em Canoas — RS.";
+  }
+  if (/quem|sobre|barbearia|servico|servicos|fazem/.test(normalizedQuestion)) {
+    return "Somos uma barbearia tradicional, focada em atendimento de excelência, corte clássico e barba à navalha.";
+  }
+  return "Estou em formato de protótipo e sei somente sobre a Barbearia Brasa, sua localização na Avenida Navalha em Canoas — RS, sua proposta de barbearia tradicional com corte clássico e barba à navalha, e o horário de segunda a sábado, das 09:00 às 20:00.";
+}
+
+function PrototypeChat() {
+  const [open, setOpen] = useState(false);
+  const [question, setQuestion] = useState("");
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { id: 0, author: "assistant", text: chatWelcomeMessage },
+  ]);
+
+  function sendMessage(text = question) {
+    const message = text.trim();
+    if (!message) return;
+
+    setMessages((current) => [
+      ...current,
+      { id: current.length, author: "visitor", text: message },
+      { id: current.length + 1, author: "assistant", text: getChatReply(message) },
+    ]);
+    setQuestion("");
+  }
+
+  return (
+    <>
+      {open && (
+        <section className="prototype-chat" aria-label="Chat da Barbearia Brasa">
+          <header className="prototype-chat__header">
+            <div>
+              <strong>Barbearia Brasa</strong>
+              <span>Assistente em protótipo</span>
+            </div>
+            <button
+              className="prototype-chat__close"
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label="Fechar chat"
+            >
+              <X aria-hidden="true" size={18} />
+            </button>
+          </header>
+          <div className="prototype-chat__messages" role="log" aria-live="polite">
+            {messages.map((message) => (
+              <p
+                className={`prototype-chat__message prototype-chat__message--${message.author}`}
+                key={message.id}
+              >
+                {message.text}
+              </p>
+            ))}
+          </div>
+          <div className="prototype-chat__suggestions" aria-label="Perguntas sugeridas">
+            <button type="button" onClick={() => sendMessage("Qual o horário de funcionamento?")}>
+              Horários
+            </button>
+            <button type="button" onClick={() => sendMessage("Onde fica a barbearia?")}>
+              Endereço
+            </button>
+            <button type="button" onClick={() => sendMessage("Quem somos?")}>
+              Quem somos
+            </button>
+          </div>
+          <form
+            className="prototype-chat__form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              sendMessage();
+            }}
+          >
+            <label className="sr-only" htmlFor="prototype-chat-question">Sua mensagem</label>
+            <input
+              id="prototype-chat-question"
+              type="text"
+              value={question}
+              onChange={(event) => setQuestion(event.target.value)}
+              placeholder="Escreva sua pergunta..."
+              maxLength={300}
+            />
+            <button type="submit" aria-label="Enviar mensagem" disabled={!question.trim()}>
+              <Send aria-hidden="true" size={17} />
+            </button>
+          </form>
+        </section>
+      )}
+      <button
+        className="prototype-chat__toggle"
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        aria-label={open ? "Fechar chat" : "Abrir chat"}
+        aria-expanded={open}
+      >
+        {open ? <X aria-hidden="true" size={21} /> : <MessageCircle aria-hidden="true" size={21} />}
+        <span>Chat</span>
+      </button>
+    </>
+  );
+}
+
 function SiteApp() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [bookingOpen, setBookingOpen] = useState(false);
@@ -314,6 +436,18 @@ function SiteApp() {
     <>
       <a className="skip-link" href="#conteudo">Pular para o conteúdo</a>
       <BookingModal open={bookingOpen} onClose={() => setBookingOpen(false)} />
+      <a
+        className="google-review"
+        href="https://www.google.com/maps/search/?api=1&query=Brasa%20Barbearia%20Canoas%20RS"
+        target="_blank"
+        rel="noreferrer"
+        aria-label="Nos avalie no Google Maps — buscar Brasa Barbearia em Canoas, Rio Grande do Sul"
+      >
+        <span className="google-review__icon" aria-hidden="true">G</span>
+        <span className="google-review__stars" aria-label="5 estrelas">★★★★★</span>
+        <span>Nos avalie</span>
+      </a>
+      <PrototypeChat />
 
       <header className="site-header">
         <Wordmark />
@@ -333,6 +467,14 @@ function SiteApp() {
           id="site-nav"
           aria-label="Navegação principal"
         >
+          <span className="site-nav__contact">
+            <MapPin aria-hidden="true" />
+            Canoas — RS
+          </span>
+          <a className="site-nav__contact" href="tel:+5551900000000">
+            <Phone aria-hidden="true" />
+            (51) 90000-0000
+          </a>
           {navLinks.map(([label, href]) => (
             <a key={href} href={href} onClick={() => setMenuOpen(false)}>{label}</a>
           ))}
@@ -501,11 +643,20 @@ function SiteApp() {
       </main>
 
       <footer className="site-footer">
-        <Wordmark footer />
-        <p>O seu estilo. Sem atalhos.</p>
-        <a href="#inicio">VOLTAR AO TOPO ↑</a>
-        <Link className="site-footer__admin" to="/admin/login">ÁREA DA BARBEARIA</Link>
-        <small>© {new Date().getFullYear()} BRASA BARBEARIA · FEITO COM CAPRICHO.</small>
+        <div className="site-footer__top">
+          <Wordmark footer />
+          <p>O seu estilo. Sem atalhos.</p>
+          <a href="#inicio">VOLTAR AO TOPO ↑</a>
+        </div>
+        <address className="site-footer__contact">
+          <span><MapPin aria-hidden="true" /> Rua das Navalhas, 123 — Centro, Canoas — RS</span>
+          <a href="tel:+5551900000000"><Phone aria-hidden="true" /> (51) 90000-0000</a>
+          <small>Contato ilustrativo</small>
+        </address>
+        <div className="site-footer__bottom">
+          <small>© {new Date().getFullYear()} BRASA BARBEARIA · FEITO COM CAPRICHO.</small>
+          <Link className="site-footer__admin" to="/admin/login">ÁREA DA BARBEARIA</Link>
+        </div>
       </footer>
     </>
   );
