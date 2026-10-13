@@ -245,7 +245,6 @@ function AppointmentFields({
                     min="08:00"
                     max="18:00"
                     step={900}
-                    list={`booking-time-options-${appointment.id}`}
                     value={appointment.time}
                     onChange={(event) => onChange(appointment.id, { time: event.target.value })}
                     required
@@ -254,11 +253,6 @@ function AppointmentFields({
                     aria-invalid={occupiedSelectedTime}
                     aria-describedby={`booking-time-hint-${appointment.id}`}
                   />
-                  <datalist id={`booking-time-options-${appointment.id}`}>
-                    {allTimes.filter((time) => !blockedTimes.includes(time)).map((time) => (
-                      <option value={time} key={time} />
-                    ))}
-                  </datalist>
                   <p className="booking-modal__hint" id={`booking-time-hint-${appointment.id}`}>
                     Atendimento das 08:00 às 18:00. Sugestões livres:{" "}
                     {allTimes.filter((time) => !blockedTimes.includes(time)).join(", ") || "nenhuma"}.
