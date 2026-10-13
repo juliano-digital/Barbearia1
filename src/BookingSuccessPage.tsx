@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link, useLocation, useParams } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { ArrowLeft, CalendarDays, Check, Clock3, Scissors } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, CircleX, Clock3, Scissors } from "lucide-react";
 import { getSupabaseClient } from "./lib/supabase";
 
 type Booking = {
@@ -12,6 +12,7 @@ type Booking = {
   data_agendamento: string;
   horario_agendamento: string;
   status: string;
+  cancellation_reason?: string | null;
 };
 
 function parseBooking(value: unknown): Booking | null {
@@ -42,6 +43,12 @@ export default function BookingSuccessPage() {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [now, setNow] = useState(Date.now());
+  const [cancellationFormOpen, setCancellationFormOpen] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
+  const [cancellationError, setCancellationError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancellationNotice, setCancellationNotice] = useState("");
   const additionalBookingCount =
     location.state &&
     typeof location.state === "object" &&
@@ -93,6 +100,53 @@ export default function BookingSuccessPage() {
     };
   }, [id]);
 
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  async function handleCancelBooking(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!booking) return;
+
+    const reason = cancellationReason.trim();
+    if (reason.length < 5 || reason.length > 500) {
+      setCancellationError("Informe um motivo com pelo menos 5 caracteres.");
+      return;
+    }
+
+    setCancelling(true);
+    setCancellationError("");
+    try {
+      const { data, error: cancelError } = await getSupabaseClient().rpc(
+        "cancelar_agendamento",
+        { p_agendamento_id: booking.id, p_motivo: reason },
+      );
+      if (cancelError) throw cancelError;
+      if (!data) {
+        setCancellationError("O prazo de cancelamento terminou ou este agendamento já foi alterado.");
+        return;
+      }
+
+      setBooking({ ...booking, status: "cancelado", cancellation_reason: reason });
+      setCancellationFormOpen(false);
+      setCancellationNotice("Agendamento cancelado.");
+    } catch (cancelError) {
+      if (
+        cancelError &&
+        typeof cancelError === "object" &&
+        "message" in cancelError &&
+        String(cancelError.message).includes("cancelar_agendamento")
+      ) {
+        setCancellationError("O banco ainda não foi atualizado para cancelamentos. Execute o SQL atualizado de agendamentos no Supabase.");
+      } else {
+        setCancellationError("Não foi possível cancelar agora. Atualize a página e tente novamente.");
+      }
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#111110] px-5 text-[#f2eee7]">
@@ -125,6 +179,13 @@ export default function BookingSuccessPage() {
   }
 
   const isConfirmed = booking.status === "confirmado";
+  const appointmentTime = new Date(
+    `${booking.data_agendamento}T${booking.horario_agendamento.slice(0, 5)}:00-03:00`,
+  ).getTime();
+  const canCancel =
+    (booking.status === "confirmado" || booking.status === "pendente") &&
+    Number.isFinite(appointmentTime) &&
+    appointmentTime - now > 20 * 60 * 1000;
 
   return (
     <main className="grid min-h-screen place-items-center bg-[#111110] px-4 py-10 text-[#f2eee7] sm:px-6">
@@ -135,19 +196,35 @@ export default function BookingSuccessPage() {
         transition={{ duration: 0.28, ease: "easeOut" }}
         aria-labelledby="success-title"
       >
-        <span className="mx-auto grid size-16 place-items-center rounded-full bg-emerald-500/15 text-emerald-400">
-          <Check aria-hidden="true" className="size-9 stroke-[2]" />
+        <span className={`mx-auto grid size-16 place-items-center rounded-full ${
+          booking.status === "cancelado"
+            ? "bg-red-500/15 text-red-300"
+            : "bg-emerald-500/15 text-emerald-400"
+        }`}>
+          {booking.status === "cancelado"
+            ? <CircleX aria-hidden="true" className="size-9 stroke-[2]" />
+            : <Check aria-hidden="true" className="size-9 stroke-[2]" />}
         </span>
         <p className="mt-6 text-xs font-semibold uppercase tracking-[0.2em] text-[#e3a343]">
           Brasa Barbearia
         </p>
+        {booking.status === "pendente" && (
+          <div className="booking-success-toast" role="status">
+            {booking.servico} · {format(date, "dd/MM/yyyy")} às{" "}
+            {booking.horario_agendamento.slice(0, 5)}.
+          </div>
+        )}
         <h1 id="success-title" className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">
-          {isConfirmed ? "Agendamento confirmado!" : "Detalhes do agendamento"}
+          {booking.status === "cancelado"
+            ? "Agendamento cancelado."
+            : isConfirmed ? "Agendamento confirmado!" : "Horário marcado."}
         </h1>
         <p className="mt-3 text-[#a9a29a]">
-          {isConfirmed
-            ? "Pronto! Seu horário está reservado. Esperamos você."
-            : `Este agendamento está ${booking.status}.`}
+          {booking.status === "cancelado"
+            ? "Este horário foi cancelado."
+            : isConfirmed
+              ? "Pronto! Seu horário está reservado. Esperamos você."
+              : "Recebemos os dados do seu agendamento."}
         </p>
 
         <dl className="mt-8 grid gap-3 text-left sm:grid-cols-2">
@@ -179,6 +256,84 @@ export default function BookingSuccessPage() {
         <p className="mt-5 text-xs text-[#a9a29a]">
           Código do agendamento: {booking.id.slice(0, 8).toUpperCase()}
         </p>
+        {booking.status === "cancelado" ? (
+          <div className="mt-6 rounded-xl border border-red-900/60 bg-red-950/30 p-4 text-left">
+            <p className="font-semibold text-red-200">Agendamento cancelado</p>
+            {booking.cancellation_reason && (
+              <p className="mt-2 text-sm text-[#a9a29a]">
+                Motivo: {booking.cancellation_reason}
+              </p>
+            )}
+          </div>
+        ) : canCancel ? (
+          <div className="mt-6 text-left">
+            {!cancellationFormOpen ? (
+              <button
+                className="w-full rounded-xl border border-red-900/70 px-5 py-3 font-semibold text-red-200 transition hover:bg-red-950/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-300"
+                type="button"
+                onClick={() => {
+                  setCancellationError("");
+                  setCancellationFormOpen(true);
+                }}
+              >
+                Cancelar agendamento
+              </button>
+            ) : (
+              <form
+                className="grid gap-3 rounded-xl border border-[#39342e] bg-[#111110] p-4"
+                onSubmit={(event) => void handleCancelBooking(event)}
+              >
+                <label className="grid gap-2 text-sm font-medium" htmlFor="cancellation-reason">
+                  Motivo do cancelamento
+                  <textarea
+                    id="cancellation-reason"
+                    className="min-h-24 resize-y rounded-lg border border-[#39342e] bg-[#1c1b19] p-3 text-[#f2eee7] placeholder:text-[#a9a29a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#e3a343]"
+                    value={cancellationReason}
+                    onChange={(event) => setCancellationReason(event.target.value)}
+                    minLength={5}
+                    maxLength={500}
+                    required
+                    autoFocus
+                    placeholder="Conte por que precisa cancelar"
+                    aria-describedby={cancellationError ? "cancellation-error" : undefined}
+                  />
+                </label>
+                <p className="text-xs text-[#a9a29a]">
+                  O cancelamento deve ser solicitado pelo menos 20 minutos antes do horário marcado.
+                </p>
+                {cancellationError && (
+                  <p id="cancellation-error" className="text-sm text-red-300" role="alert">
+                    {cancellationError}
+                  </p>
+                )}
+                <div className="flex flex-wrap justify-end gap-3">
+                  <button
+                    className="rounded-lg border border-[#39342e] px-4 py-2 text-sm font-semibold text-[#a9a29a] hover:text-[#f2eee7]"
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => setCancellationFormOpen(false)}
+                  >
+                    Voltar
+                  </button>
+                  <button
+                    className="rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    type="submit"
+                    disabled={cancelling || cancellationReason.trim().length < 5}
+                  >
+                    {cancelling ? "Cancelando..." : "Confirmar cancelamento"}
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        ) : (booking.status === "confirmado" || booking.status === "pendente") ? (
+          <p className="mt-6 text-sm text-[#a9a29a]" role="status">
+            O prazo para cancelamento encerrou. O cancelamento deve ser solicitado pelo menos 20 minutos antes do horário marcado.
+          </p>
+        ) : null}
+        {cancellationNotice && (
+          <p className="mt-3 text-sm text-emerald-300" role="status">{cancellationNotice}</p>
+        )}
         {reminderStorageFailed && (
           <p className="mt-3 text-sm text-[#e3a343]" role="status">
             Este navegador não conseguiu guardar os avisos dos agendamentos na página inicial.

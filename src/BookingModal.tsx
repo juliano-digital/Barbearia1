@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { format, parseISO, startOfToday } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/style.css";
 import { getSupabaseClient } from "./lib/supabase";
 import { bookingServices } from "./lib/bookingServices";
 import { formatBrazilianPhone } from "./lib/phone";
 import { LAST_BOOKING_STORAGE_KEY, readBookingIds, saveBookingIds } from "./lib/bookingStorage";
 
-const allTimes = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+const allTimes = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
 const stepTitles = ["Serviço", "Data e horário", "Seus dados"];
 const priceFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -23,6 +20,7 @@ type AppointmentDraft = {
 type AvailabilityStatus = {
   loading: boolean;
   error: boolean;
+  occupiedTimes?: string[];
 };
 
 type AppointmentStage = "service" | "schedule";
@@ -61,6 +59,12 @@ function isTimeInPast(date: Date, time: string) {
   return timeSlot.getTime() <= Date.now();
 }
 
+function isBusinessTime(time: string) {
+  const [hours, minutes] = time.split(":").map(Number);
+  const minutesFromMidnight = hours * 60 + minutes;
+  return minutesFromMidnight >= 8 * 60 && minutesFromMidnight <= 18 * 60;
+}
+
 function AppointmentFields({
   appointment,
   appointments,
@@ -86,7 +90,7 @@ function AppointmentFields({
       setOccupiedTimes([]);
       setAvailabilityLoading(false);
       setAvailabilityError(false);
-      onAvailabilityChange(appointment.id, { loading: false, error: false });
+      onAvailabilityChange(appointment.id, { loading: false, error: false, occupiedTimes: [] });
       return () => {
         active = false;
       };
@@ -98,17 +102,19 @@ function AppointmentFields({
 
     async function fetchOccupiedTimes() {
       let requestFailed = false;
+      let occupiedTimesForDate: string[] = [];
       try {
         setOccupiedTimes([]);
         const { data, error: queryError } = await getSupabaseClient()
           .from("agendamentos")
           .select("horario_agendamento")
           .eq("data_agendamento", appointment.date)
-          .eq("status", "confirmado");
+          .in("status", ["pendente", "confirmado"]);
 
         if (queryError) throw queryError;
         if (active) {
-          setOccupiedTimes(data.map((booking) => booking.horario_agendamento.slice(0, 5)));
+          occupiedTimesForDate = data.map((booking) => booking.horario_agendamento.slice(0, 5));
+          setOccupiedTimes(occupiedTimesForDate);
         }
       } catch {
         requestFailed = true;
@@ -121,6 +127,7 @@ function AppointmentFields({
           onAvailabilityChange(appointment.id, {
             loading: false,
             error: requestFailed,
+            occupiedTimes: occupiedTimesForDate,
           });
         }
       }
@@ -147,6 +154,8 @@ function AppointmentFields({
     ),
   );
 
+  const occupiedSelectedTime = Boolean(appointment.time && occupiedTimes.includes(appointment.time));
+
   return (
     <section className="booking-appointment" aria-labelledby={`booking-appointment-title-${appointment.id}`}>
       <header className="booking-appointment__header">
@@ -169,96 +178,100 @@ function AppointmentFields({
       {stage === "service" ? (
         <>
           <p className="booking-modal__hint">Escolha o serviço ideal para este horário.</p>
-          <div className="booking-service-list">
+          <label className="booking-native-field" htmlFor={`booking-service-${appointment.id}`}>
+            Serviço
+          </label>
+          <select
+            className="booking-native-input"
+            id={`booking-service-${appointment.id}`}
+            value={appointment.service}
+            onChange={(event) => onChange(appointment.id, { service: event.target.value })}
+            required
+            disabled={submitting}
+            aria-label={`Serviço do agendamento ${index + 1}`}
+          >
+            <option value="">Selecione um serviço</option>
             {bookingServices.map((item) => (
-              <button
-                className={`booking-service${appointment.service === item.name ? " is-selected" : ""}`}
-                key={item.name}
-                type="button"
-                disabled={submitting}
-                aria-pressed={appointment.service === item.name}
-                onClick={() => onChange(appointment.id, { service: item.name })}
-              >
-                <span><strong>{item.name}</strong><small>{item.durationMinutes} min</small></span>
-                <strong>{priceFormatter.format(item.price)}</strong>
-              </button>
+              <option value={item.name} key={item.name}>
+                {item.name} · {item.durationMinutes} min · {priceFormatter.format(item.price)}
+              </option>
             ))}
-          </div>
+          </select>
         </>
       ) : (
         <>
           <p className="booking-modal__hint booking-appointment__calendar-label">
-            {date ? "Data selecionada" : "Escolha o melhor dia"}
+            Escolha a data e o horário do seu atendimento.
           </p>
-          <DayPicker
-            mode="single"
-            selected={date}
-            onSelect={(selectedDate) => onChange(appointment.id, {
-              date: selectedDate ? format(selectedDate, "yyyy-MM-dd") : "",
-              time: "",
-            })}
-            disabled={submitting ? () => true : { before: startOfToday() }}
-            locale={ptBR}
-            showOutsideDays
-            className="booking-calendar"
-            aria-label={`Calendário do horário ${index + 1}`}
-            labels={{
-              labelNav: () => "Navegação do calendário",
-              labelNext: () => "Próximo mês",
-              labelPrevious: () => "Mês anterior",
-            }}
+          <label className="booking-native-field" htmlFor={`booking-date-${appointment.id}`}>
+            Data
+          </label>
+          <input
+            className="booking-native-input"
+            id={`booking-date-${appointment.id}`}
+            type="date"
+            min={format(startOfToday(), "yyyy-MM-dd")}
+            value={appointment.date}
+            onChange={(event) => onChange(appointment.id, { date: event.target.value, time: "" })}
+            required
+            disabled={submitting}
+            aria-label={`Data do agendamento ${index + 1}`}
           />
+          {date && (
+            <div className="booking-appointment__times">
+              <label className="booking-native-field" htmlFor={`booking-time-${appointment.id}`}>
+                Horário — {format(date, "dd/MM/yyyy")}
+              </label>
+              {availabilityLoading ? (
+                <div className="booking-loading" role="status"><span /> Consultando disponibilidade...</div>
+              ) : availabilityError ? (
+                <div className="booking-modal__error" role="alert">
+                  <p>Não foi possível consultar a disponibilidade desta data.</p>
+                  <button className="booking-modal__text-button" type="button" onClick={onRetry}>
+                    Tentar novamente
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <input
+                    className="booking-native-input"
+                    id={`booking-time-${appointment.id}`}
+                    type="time"
+                    min="08:00"
+                    max="18:00"
+                    step={900}
+                    list={`booking-time-options-${appointment.id}`}
+                    value={appointment.time}
+                    onChange={(event) => onChange(appointment.id, { time: event.target.value })}
+                    required
+                    disabled={submitting}
+                    aria-label={`Horário do agendamento ${index + 1}`}
+                    aria-invalid={occupiedSelectedTime}
+                    aria-describedby={`booking-time-hint-${appointment.id}`}
+                  />
+                  <datalist id={`booking-time-options-${appointment.id}`}>
+                    {allTimes.filter((time) => !blockedTimes.includes(time)).map((time) => (
+                      <option value={time} key={time} />
+                    ))}
+                  </datalist>
+                  <p className="booking-modal__hint" id={`booking-time-hint-${appointment.id}`}>
+                    Atendimento das 08:00 às 18:00. Sugestões livres:{" "}
+                    {allTimes.filter((time) => !blockedTimes.includes(time)).join(", ") || "nenhuma"}.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
         </>
       )}
 
-      {stage === "schedule" && date && (
-        <div className="booking-appointment__times">
-          <p className="booking-modal__hint">
-            Horários para {format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}
-          </p>
-          {availabilityLoading ? (
-            <div className="booking-loading" role="status"><span /> Consultando disponibilidade...</div>
-          ) : availabilityError ? (
-            <div className="booking-modal__error" role="alert">
-              <p>Não foi possível consultar a disponibilidade desta data.</p>
-              <button
-                className="booking-modal__text-button"
-                type="button"
-                onClick={onRetry}
-              >
-                Tentar novamente
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="booking-time-grid">
-                {allTimes.map((time) => {
-                  const isOccupied = blockedTimes.includes(time);
-                  return (
-                    <button
-                      className={`booking-time${appointment.time === time ? " is-selected" : ""}${isOccupied ? " is-occupied" : ""}`}
-                      key={time}
-                      type="button"
-                      disabled={isOccupied || submitting}
-                      aria-pressed={appointment.time === time}
-                      onClick={() => onChange(appointment.id, { time })}
-                    >
-                      {time}
-                    </button>
-                  );
-                })}
-              </div>
-              {!appointment.time && blockedTimes.length === allTimes.length && (
-                <p className="booking-modal__hint">Não há horários livres nessa data. Escolha outro dia.</p>
-              )}
-            </>
-          )}
-        </div>
-      )}
-
-      {(error || (stage === "schedule" && duplicateTime)) && (
+      {(error || (stage === "schedule" && (duplicateTime || occupiedSelectedTime))) && (
         <p className="booking-appointment__error" role="alert">
-          {duplicateTime ? "Esse horário já foi selecionado em outro agendamento." : error}
+          {duplicateTime
+            ? "Esse horário já foi selecionado em outro agendamento."
+            : occupiedSelectedTime
+              ? "Esse horário acabou de ser reservado. Escolha outro."
+              : error}
         </p>
       )}
     </section>
@@ -442,9 +455,21 @@ export default function BookingModal({ open, onClose }: BookingModalProps) {
       });
       return;
     }
+    if (!isBusinessTime(appointment.time)) {
+      setAppointmentErrors({
+        [appointment.id]: "Escolha um horário entre 08:00 e 18:00.",
+      });
+      return;
+    }
     if (isTimeInPast(parseISO(appointment.date), appointment.time)) {
       setAppointmentErrors({
         [appointment.id]: "Este horário já passou. Escolha outro horário ou data.",
+      });
+      return;
+    }
+    if (availability[appointment.id]?.occupiedTimes?.includes(appointment.time)) {
+      setAppointmentErrors({
+        [appointment.id]: "Esse horário acabou de ser reservado. Escolha outro.",
       });
       return;
     }
@@ -512,8 +537,12 @@ export default function BookingModal({ open, onClose }: BookingModalProps) {
     for (const appointment of appointments) {
       if (!appointment.service || !appointment.date || !appointment.time) {
         nextErrors[appointment.id] = "Selecione o serviço, a data e o horário deste agendamento.";
+      } else if (!isBusinessTime(appointment.time)) {
+        nextErrors[appointment.id] = "Escolha um horário entre 08:00 e 18:00.";
       } else if (isTimeInPast(parseISO(appointment.date), appointment.time)) {
         nextErrors[appointment.id] = "Este horário já passou. Escolha outro horário ou data.";
+      } else if (availability[appointment.id]?.occupiedTimes?.includes(appointment.time)) {
+        nextErrors[appointment.id] = "Esse horário acabou de ser reservado. Escolha outro.";
       } else if (
         !availability[appointment.id] ||
         availability[appointment.id].loading ||
@@ -551,6 +580,7 @@ export default function BookingModal({ open, onClose }: BookingModalProps) {
           whatsapp: phoneDigits,
           data_agendamento: appointment.date,
           horario_agendamento: appointment.time,
+          status: "pendente",
         })))
         .select("id");
 

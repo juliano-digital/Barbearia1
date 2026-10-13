@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState, type ReactNode } from "react";
-import { HashRouter, Link, Route, Routes } from "react-router-dom";
+import { HashRouter, Link, Navigate, Route, Routes } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import gsap from "gsap";
@@ -121,12 +121,33 @@ type HomeBooking = {
   servico: string;
   data_agendamento: string;
   horario_agendamento: string;
+  status: string;
 };
+
+function isBookingVisibleAt(booking: HomeBooking, now: number) {
+  const date = parseISO(booking.data_agendamento);
+  const [hours, minutes] = booking.horario_agendamento.split(":").map(Number);
+  if (
+    !isValid(date) ||
+    !Number.isInteger(hours) ||
+    !Number.isInteger(minutes) ||
+    hours < 0 ||
+    hours > 23 ||
+    minutes < 0 ||
+    minutes > 59
+  ) {
+    return false;
+  }
+
+  date.setHours(hours, minutes, 0, 0);
+  return date.getTime() + 30 * 60 * 1000 > now;
+}
 
 function BookingNotice() {
   const [bookings, setBookings] = useState<HomeBooking[]>([]);
   const [loadError, setLoadError] = useState(false);
   const [retry, setRetry] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
     let active = true;
@@ -143,23 +164,27 @@ function BookingNotice() {
         const { data, error } = await getSupabaseClient()
           .from("agendamentos")
           .select("id, servico, data_agendamento, horario_agendamento, status")
-          .in("id", bookingIds);
+          .in("id", bookingIds)
+          .in("status", ["pendente", "confirmado"])
+          .order("data_agendamento", { ascending: true })
+          .order("horario_agendamento", { ascending: true });
         if (error) throw error;
 
         if (active) {
           setBookings(data
             .filter((booking) =>
-              booking.status === "confirmado" &&
               typeof booking.id === "string" &&
               typeof booking.servico === "string" &&
               typeof booking.data_agendamento === "string" &&
-              typeof booking.horario_agendamento === "string",
+              typeof booking.horario_agendamento === "string" &&
+              (booking.status === "pendente" || booking.status === "confirmado"),
             )
             .map((booking) => ({
               id: booking.id,
               servico: booking.servico,
               data_agendamento: booking.data_agendamento,
               horario_agendamento: booking.horario_agendamento,
+              status: booking.status,
             })));
         }
       } catch {
@@ -168,10 +193,17 @@ function BookingNotice() {
     }
 
     void loadBooking();
+    const refreshInterval = window.setInterval(() => void loadBooking(), 60_000);
     return () => {
       active = false;
+      window.clearInterval(refreshInterval);
     };
   }, [retry]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   if (loadError) {
     return (
@@ -183,11 +215,11 @@ function BookingNotice() {
       </div>
     );
   }
-  const validBookings = bookings.filter((booking) => isValid(parseISO(booking.data_agendamento)));
+  const validBookings = bookings.filter((booking) => isBookingVisibleAt(booking, now));
   if (!validBookings.length) return null;
 
   return (
-    <div className="booking-notices" aria-label="Seus agendamentos confirmados">
+    <div className="booking-notices" aria-label="Seus horários marcados">
       {validBookings.map((booking, index) => {
         const date = parseISO(booking.data_agendamento);
         return (
@@ -200,7 +232,9 @@ function BookingNotice() {
             <span className="booking-notice__icon" aria-hidden="true">✓</span>
             <span className="booking-notice__content">
               <strong>
-                {validBookings.length > 1 ? `Agendamento ${index + 1} confirmado` : "Seu agendamento está confirmado"}
+                {booking.status === "confirmado"
+                  ? validBookings.length > 1 ? `Agendamento ${index + 1} confirmado` : "Seu agendamento está confirmado"
+                  : validBookings.length > 1 ? `Horário ${index + 1} solicitado` : "Seu horário foi solicitado"}
               </strong>
               <span>{booking.servico}</span>
               <span className="booking-notice__details">
@@ -459,7 +493,7 @@ function SiteApp() {
         <Wordmark footer />
         <p>O seu estilo. Sem atalhos.</p>
         <a href="#inicio">VOLTAR AO TOPO ↑</a>
-        <Link className="site-footer__admin" to="/admin">ÁREA DA BARBEARIA</Link>
+        <Link className="site-footer__admin" to="/admin/login">ÁREA DA BARBEARIA</Link>
         <small>© {new Date().getFullYear()} BRASA BARBEARIA · FEITO COM CAPRICHO.</small>
       </footer>
     </>
@@ -470,7 +504,9 @@ export default function App() {
   return (
     <HashRouter>
       <Routes>
-        <Route path="/admin/*" element={<AdminPage />} />
+        <Route path="/admin/login" element={<AdminPage />} />
+        <Route path="/admin" element={<AdminPage />} />
+        <Route path="/admin/*" element={<Navigate to="/admin" replace />} />
         <Route path="/confirmacao" element={<CustomerHistoryPage />} />
         <Route path="/minha-conta" element={<CustomerHistoryPage />} />
         <Route

@@ -22,7 +22,7 @@ function canCancelBooking(booking: Booking, now: number) {
   const appointmentTime = new Date(
     `${booking.data_agendamento}T${booking.horario_agendamento.slice(0, 5)}:00-03:00`,
   ).getTime();
-  return Number.isFinite(appointmentTime) && appointmentTime - now >= 2 * 60 * 60 * 1000;
+  return Number.isFinite(appointmentTime) && appointmentTime - now > 20 * 60 * 1000;
 }
 
 function formatBookingStatus(status: string) {
@@ -285,7 +285,7 @@ export default function CustomerHistoryPage() {
             </dl>
             {cancellationError && <p className="admin-error" role="alert">{cancellationError}</p>}
             <p className="customer-cancellation-note">
-              O cancelamento pode ser feito até 2 horas antes do horário marcado.
+              O cancelamento pode ser feito até 20 minutos antes do horário marcado.
             </p>
             <button
               className="customer-cancel-button"
