@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Clock3, Phone, Scissors, Trash2, UserRound } from "lucide-react";
+import { CalendarDays, Clock3, Eye, EyeOff, Phone, Scissors, Trash2, UserRound } from "lucide-react";
 import ModalConfirmacao from "./components/ModalConfirmacao";
 import { getSupabaseClient, isSupabaseConfigured } from "./lib/supabase";
 import { formatBrazilianPhone } from "./lib/phone";
@@ -16,6 +16,7 @@ type Agendamento = {
   horario_agendamento: string;
   status: string;
   created_at: string;
+  cancellation_reason: string | null;
 };
 
 type PublicAgendamento = Pick<
@@ -27,6 +28,7 @@ type PublicAgendamento = Pick<
   | "data_agendamento"
   | "horario_agendamento"
   | "status"
+  | "cancellation_reason"
 >;
 
 function friendlyError(error: unknown) {
@@ -67,7 +69,7 @@ function PublicAgenda({
       try {
         const { data, error: queryError } = await getSupabaseClient()
           .from("agendamentos")
-          .select("id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento, status")
+          .select("id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento, status, cancellation_reason")
           .order("data_agendamento", { ascending: true });
 
         if (queryError) throw queryError;
@@ -164,6 +166,12 @@ function PublicAgenda({
                 <span className={`admin-status admin-status--${booking.status}`}>{booking.status}</span>
                 <h2>{booking.servico}</h2>
               </div>
+              {booking.status === "cancelado" && (
+                <p className="admin-booking-row__cancellation">
+                  <small>Motivo do cancelamento</small>
+                  <span>{booking.cancellation_reason?.trim() || "Motivo não informado."}</span>
+                </p>
+              )}
               <p className="admin-booking-row__detail">
                 <UserRound aria-hidden="true" />
                 <span><small>Cliente</small>{booking.nome_cliente}</span>
@@ -222,6 +230,7 @@ export default function AdminPage() {
   const [toast, setToast] = useState("");
   const [publicAgenda, setPublicAgenda] = useState(false);
   const [deletedBookingId, setDeletedBookingId] = useState("");
+  const [examplePasswordVisible, setExamplePasswordVisible] = useState(false);
   const loadBookings = useCallback(async () => {
     if (!isSupabaseConfigured()) {
       setLoadFailed(true);
@@ -411,7 +420,25 @@ export default function AdminPage() {
           <label htmlFor="example-admin-email">E-mail de exemplo</label>
           <input id="example-admin-email" type="email" value="admin@exemplo.com" readOnly />
           <label htmlFor="example-admin-password">Senha de exemplo</label>
-          <input id="example-admin-password" type="password" value="senha123" readOnly />
+          <div className="admin-password-field">
+            <input
+              id="example-admin-password"
+              type={examplePasswordVisible ? "text" : "password"}
+              value="senha123"
+              readOnly
+            />
+            <button
+              className="admin-password-field__toggle"
+              type="button"
+              aria-label={examplePasswordVisible ? "Ocultar senha de exemplo" : "Mostrar senha de exemplo"}
+              aria-pressed={examplePasswordVisible}
+              onClick={() => setExamplePasswordVisible((visible) => !visible)}
+            >
+              {examplePasswordVisible
+                ? <EyeOff aria-hidden="true" size={18} />
+                : <Eye aria-hidden="true" size={18} />}
+            </button>
+          </div>
           <button
             className="button admin-submit"
             type="button"

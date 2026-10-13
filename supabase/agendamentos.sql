@@ -152,7 +152,8 @@ grant select (
   whatsapp,
   data_agendamento,
   horario_agendamento,
-  status
+  status,
+  cancellation_reason
 )
   on public.agendamentos to anon;
 grant select on table public.agendamentos to authenticated;

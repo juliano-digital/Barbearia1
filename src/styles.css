@@ -1755,6 +1755,43 @@ p {
   box-sizing: border-box;
 }
 
+.admin-password-field {
+  position: relative;
+  margin-bottom: 17px;
+}
+
+.admin-password-field input {
+  display: block;
+  width: 100%;
+  min-height: 46px;
+  margin: 0;
+  padding: 0 44px 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  font: inherit;
+  font-size: 0.82rem;
+}
+
+.admin-password-field__toggle {
+  position: absolute;
+  top: 50%;
+  right: 8px;
+  display: grid;
+  width: 32px;
+  height: 32px;
+  transform: translateY(-50%);
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.admin-password-field__toggle:hover {
+  color: var(--color-accent);
+}
+
 .admin-login .admin-remember {
   display: flex;
   align-items: center;
@@ -2932,6 +2969,25 @@ p {
     minmax(105px, 0.8fr)
     minmax(95px, 0.7fr)
     auto;
+}
+
+.admin-booking-row__cancellation {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 4px;
+  margin: 0;
+  padding: 10px 12px;
+  border-left: 2px solid #cf5b49;
+  background: rgb(207 91 73 / 7%);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-booking-row__cancellation small {
+  color: #f0aaa0;
+  font-size: 0.63rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .admin-booking-row__service {
