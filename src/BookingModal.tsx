@@ -4,7 +4,12 @@ import { format, parseISO, startOfToday } from "date-fns";
 import { getSupabaseClient } from "./lib/supabase";
 import { bookingServices } from "./lib/bookingServices";
 import { formatBrazilianPhone } from "./lib/phone";
-import { LAST_BOOKING_STORAGE_KEY, readBookingIds, saveBookingIds } from "./lib/bookingStorage";
+import {
+  LAST_BOOKING_STORAGE_KEY,
+  readBookingIds,
+  saveBookingIds,
+  saveBookingReceiptContacts,
+} from "./lib/bookingStorage";
 
 const allTimes = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
 const stepTitles = ["Serviço", "Data e horário", "Seus dados"];
@@ -601,6 +606,13 @@ export default function BookingModal({ open, onClose }: BookingModalProps) {
 
       const bookingIds = data.map((booking) => booking.id);
       let reminderStorageFailed = false;
+      let receiptStorageFailed = false;
+      try {
+        const receiptContact = { nome_cliente: clientName.trim(), whatsapp: phoneDigits };
+        saveBookingReceiptContacts(bookingIds, receiptContact);
+      } catch {
+        receiptStorageFailed = true;
+      }
       try {
         const previousIds = readBookingIds(window.localStorage.getItem(LAST_BOOKING_STORAGE_KEY));
         saveBookingIds([...previousIds, ...bookingIds]);
@@ -608,7 +620,13 @@ export default function BookingModal({ open, onClose }: BookingModalProps) {
         reminderStorageFailed = true;
       }
       navigate(`/agendamento/comprovante/${encodeURIComponent(bookingIds[0])}`, {
-        state: { reminderStorageFailed, additionalBookingCount: bookingIds.length - 1 },
+        state: {
+          reminderStorageFailed,
+          receiptStorageFailed,
+          additionalBookingCount: bookingIds.length - 1,
+          nome_cliente: clientName.trim(),
+          whatsapp: phoneDigits,
+        },
       });
     } catch (error) {
       setErrorMessage(error instanceof Error

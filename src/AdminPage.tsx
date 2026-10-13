@@ -2,9 +2,10 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { CalendarDays, Clock3, Scissors, Trash2 } from "lucide-react";
+import { CalendarDays, Clock3, Phone, Scissors, Trash2, UserRound } from "lucide-react";
 import ModalConfirmacao from "./components/ModalConfirmacao";
 import { getSupabaseClient, isSupabaseConfigured } from "./lib/supabase";
+import { formatBrazilianPhone } from "./lib/phone";
 
 type Agendamento = {
   id: string;
@@ -19,7 +20,13 @@ type Agendamento = {
 
 type PublicAgendamento = Pick<
   Agendamento,
-  "id" | "servico" | "data_agendamento" | "horario_agendamento" | "status"
+  | "id"
+  | "servico"
+  | "nome_cliente"
+  | "whatsapp"
+  | "data_agendamento"
+  | "horario_agendamento"
+  | "status"
 >;
 
 function friendlyError(error: unknown) {
@@ -60,7 +67,7 @@ function PublicAgenda({
       try {
         const { data, error: queryError } = await getSupabaseClient()
           .from("agendamentos")
-          .select("id, servico, data_agendamento, horario_agendamento, status")
+          .select("id, servico, nome_cliente, whatsapp, data_agendamento, horario_agendamento, status")
           .order("data_agendamento", { ascending: true });
 
         if (queryError) throw queryError;
@@ -157,6 +164,20 @@ function PublicAgenda({
                 <span className={`admin-status admin-status--${booking.status}`}>{booking.status}</span>
                 <h2>{booking.servico}</h2>
               </div>
+              <p className="admin-booking-row__detail">
+                <UserRound aria-hidden="true" />
+                <span><small>Cliente</small>{booking.nome_cliente}</span>
+              </p>
+              <a
+                className="admin-booking-row__contact admin-booking-row__contact--public"
+                href={`https://wa.me/${booking.whatsapp.replace(/\D/g, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                aria-label={`Abrir WhatsApp de ${booking.nome_cliente}`}
+              >
+                <Phone aria-hidden="true" />
+                <span><small>Telefone</small>{formatBrazilianPhone(booking.whatsapp)}</span>
+              </a>
               <p className="admin-booking-row__detail">
                 <CalendarDays aria-hidden="true" />
                 <span><small>Data</small>{formatBookingDate(booking.data_agendamento)}</span>
@@ -494,7 +515,8 @@ export default function AdminPage() {
                       <span><small>Serviço</small>{booking.servico}</span>
                     </p>
                     <a className="admin-booking-row__contact" href={`https://wa.me/${phone}`} target="_blank" rel="noreferrer">
-                      {booking.whatsapp} ↗
+                      <small>WhatsApp</small>
+                      <span>{formatBrazilianPhone(booking.whatsapp)} ↗</span>
                     </a>
                     <button
                       className="admin-delete"

@@ -145,7 +145,15 @@ create policy "Clientes podem cancelar seus próprios agendamentos com antecedê
 
 grant usage on schema public to anon, authenticated;
 revoke all privileges on table public.agendamentos from anon, authenticated;
-grant select (id, servico, data_agendamento, horario_agendamento, status)
+grant select (
+  id,
+  servico,
+  nome_cliente,
+  whatsapp,
+  data_agendamento,
+  horario_agendamento,
+  status
+)
   on public.agendamentos to anon;
 grant select on table public.agendamentos to authenticated;
 revoke insert on table public.agendamentos from anon, authenticated;
@@ -166,8 +174,7 @@ grant select (user_id) on public.admin_users to authenticated;
 -- values ('UUID-DO-USUARIO-ADMIN')
 -- on conflict (user_id) do nothing;
 
--- Anônimos só podem ler os campos usados para disponibilidade e comprovantes.
--- Dados de contato ficam visíveis apenas ao cliente autenticado e aos administradores.
+-- A consulta pública da agenda também exibe os dados de contato dos agendamentos.
 
 do $$
 begin

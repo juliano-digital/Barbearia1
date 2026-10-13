@@ -3,8 +3,10 @@ import { Link, useLocation, useParams } from "react-router-dom";
 import { format, isValid, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
-import { ArrowLeft, CalendarDays, Check, CircleX, Clock3, Scissors } from "lucide-react";
+import { ArrowLeft, CalendarDays, Check, CircleX, Clock3, Phone, Scissors, UserRound } from "lucide-react";
 import { getSupabaseClient } from "./lib/supabase";
+import { readBookingReceiptContact } from "./lib/bookingStorage";
+import { formatBrazilianPhone } from "./lib/phone";
 
 type Booking = {
   id: string;
@@ -13,7 +15,26 @@ type Booking = {
   horario_agendamento: string;
   status: string;
   cancellation_reason?: string | null;
+  nome_cliente?: string;
+  whatsapp?: string;
 };
+
+type BookingContact = Pick<Booking, "nome_cliente" | "whatsapp">;
+
+function parseBookingContact(value: unknown): BookingContact | null {
+  if (!value || typeof value !== "object") return null;
+  const candidate = value as Record<string, unknown>;
+  if (
+    typeof candidate.nome_cliente !== "string" ||
+    typeof candidate.whatsapp !== "string"
+  ) {
+    return null;
+  }
+  return {
+    nome_cliente: candidate.nome_cliente,
+    whatsapp: candidate.whatsapp,
+  };
+}
 
 function parseBooking(value: unknown): Booking | null {
   if (!value || typeof value !== "object") return null;
@@ -49,6 +70,7 @@ export default function BookingSuccessPage() {
   const [cancellationError, setCancellationError] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [cancellationNotice, setCancellationNotice] = useState("");
+  const [contactStorageWarning, setContactStorageWarning] = useState(false);
   const additionalBookingCount =
     location.state &&
     typeof location.state === "object" &&
@@ -61,6 +83,12 @@ export default function BookingSuccessPage() {
     typeof location.state === "object" &&
     "reminderStorageFailed" in location.state &&
     location.state.reminderStorageFailed === true,
+  );
+  const receiptStorageFailed = Boolean(
+    location.state &&
+    typeof location.state === "object" &&
+    "receiptStorageFailed" in location.state &&
+    location.state.receiptStorageFailed === true,
   );
 
   useEffect(() => {
@@ -80,7 +108,15 @@ export default function BookingSuccessPage() {
           if (active) setError("Não encontramos este agendamento. Confira o link ou fale com a barbearia.");
           return;
         }
-        if (active) setBooking(result);
+        let contact = parseBookingContact(location.state);
+        if (!contact) {
+          try {
+            contact = readBookingReceiptContact(id);
+          } catch {
+            if (active) setContactStorageWarning(true);
+          }
+        }
+        if (active) setBooking({ ...result, ...contact });
       } catch {
         if (active) setError("Não foi possível carregar os dados do agendamento. Tente novamente.");
       } finally {
@@ -98,7 +134,7 @@ export default function BookingSuccessPage() {
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, location.state]);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 30_000);
@@ -228,6 +264,24 @@ export default function BookingSuccessPage() {
         </p>
 
         <dl className="mt-8 grid gap-3 text-left sm:grid-cols-2">
+          {booking.nome_cliente && (
+            <div className="flex items-start gap-3 rounded-xl border border-[#39342e] bg-[#111110] p-4">
+              <UserRound aria-hidden="true" className="mt-0.5 size-5 shrink-0 stroke-[1.5] text-[#e3a343]" />
+              <div>
+                <dt className="text-sm text-[#a9a29a]">Nome</dt>
+                <dd className="font-medium">{booking.nome_cliente}</dd>
+              </div>
+            </div>
+          )}
+          {booking.whatsapp && (
+            <div className="flex items-start gap-3 rounded-xl border border-[#39342e] bg-[#111110] p-4">
+              <Phone aria-hidden="true" className="mt-0.5 size-5 shrink-0 stroke-[1.5] text-[#e3a343]" />
+              <div>
+                <dt className="text-sm text-[#a9a29a]">Telefone para contato</dt>
+                <dd className="font-medium">{formatBrazilianPhone(booking.whatsapp)}</dd>
+              </div>
+            </div>
+          )}
           <div className="flex items-start gap-3 rounded-xl border border-[#39342e] bg-[#111110] p-4 sm:col-span-2">
             <Scissors aria-hidden="true" className="mt-0.5 size-5 shrink-0 stroke-[1.5] text-[#e3a343]" />
             <div>
@@ -337,6 +391,16 @@ export default function BookingSuccessPage() {
         {reminderStorageFailed && (
           <p className="mt-3 text-sm text-[#e3a343]" role="status">
             Este navegador não conseguiu guardar os avisos dos agendamentos na página inicial.
+          </p>
+        )}
+        {receiptStorageFailed && (
+          <p className="mt-3 text-sm text-[#e3a343]" role="status">
+            Este navegador não conseguiu guardar os dados de contato para reabrir o comprovante nesta sessão.
+          </p>
+        )}
+        {contactStorageWarning && (
+          <p className="mt-3 text-sm text-[#e3a343]" role="status">
+            Não foi possível recuperar os dados de contato deste comprovante nesta sessão.
           </p>
         )}
         {!reminderStorageFailed && additionalBookingCount > 0 && (

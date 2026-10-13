@@ -7,7 +7,11 @@ import { ScrollTrigger } from "gsap/ScrollTrigger";
 import BookingModal from "./BookingModal";
 import AdminPage from "./AdminPage";
 import CustomerHistoryPage from "./CustomerHistoryPage";
-import { LAST_BOOKING_STORAGE_KEY, readBookingIds } from "./lib/bookingStorage";
+import {
+  LAST_BOOKING_STORAGE_KEY,
+  readBookingIds,
+  readBookingReceiptContact,
+} from "./lib/bookingStorage";
 import { getSupabaseClient } from "./lib/supabase";
 
 const BookingSuccessPage = lazy(() => import("./BookingSuccessPage"));
@@ -122,6 +126,8 @@ type HomeBooking = {
   data_agendamento: string;
   horario_agendamento: string;
   status: string;
+  nome_cliente?: string;
+  whatsapp?: string;
 };
 
 function isBookingVisibleAt(booking: HomeBooking, now: number) {
@@ -185,6 +191,7 @@ function BookingNotice() {
               data_agendamento: booking.data_agendamento,
               horario_agendamento: booking.horario_agendamento,
               status: booking.status,
+              ...readBookingReceiptContact(booking.id),
             })));
         }
       } catch {
@@ -227,6 +234,10 @@ function BookingNotice() {
             className="booking-notice"
             key={booking.id}
             to={`/agendamento/comprovante/${encodeURIComponent(booking.id)}`}
+            state={{
+              nome_cliente: booking.nome_cliente,
+              whatsapp: booking.whatsapp,
+            }}
             aria-label={`Ver comprovante do agendamento: ${booking.servico}, ${format(date, "EEEE, dd 'de' MMMM", { locale: ptBR })}, às ${booking.horario_agendamento.slice(0, 5)}`}
           >
             <span className="booking-notice__icon" aria-hidden="true">✓</span>
