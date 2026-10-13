@@ -11,7 +11,12 @@ import {
   saveBookingReceiptContacts,
 } from "./lib/bookingStorage";
 
-const allTimes = ["08:00", "09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00", "18:00"];
+const allTimes = Array.from({ length: 21 }, (_, index) => {
+  const minutes = 8 * 60 + index * 30;
+  const hours = Math.floor(minutes / 60).toString().padStart(2, "0");
+  const remainder = (minutes % 60).toString().padStart(2, "0");
+  return `${hours}:${remainder}`;
+});
 const stepTitles = ["Serviço", "Data e horário", "Seus dados"];
 const priceFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -67,7 +72,13 @@ function isTimeInPast(date: Date, time: string) {
 function isBusinessTime(time: string) {
   const [hours, minutes] = time.split(":").map(Number);
   const minutesFromMidnight = hours * 60 + minutes;
-  return minutesFromMidnight >= 8 * 60 && minutesFromMidnight <= 18 * 60;
+  return Number.isInteger(hours) &&
+    Number.isInteger(minutes) &&
+    minutes >= 0 &&
+    minutes < 60 &&
+    minutes % 30 === 0 &&
+    minutesFromMidnight >= 8 * 60 &&
+    minutesFromMidnight <= 18 * 60;
 }
 
 function AppointmentFields({
@@ -109,7 +120,6 @@ function AppointmentFields({
       let requestFailed = false;
       let occupiedTimesForDate: string[] = [];
       try {
-        setOccupiedTimes([]);
         const { data, error: queryError } = await getSupabaseClient()
           .from("agendamentos")
           .select("horario_agendamento")
@@ -139,8 +149,24 @@ function AppointmentFields({
     }
 
     void fetchOccupiedTimes();
+    const refreshInterval = window.setInterval(() => void fetchOccupiedTimes(), 15_000);
+    const channel = getSupabaseClient()
+      .channel(`booking-availability-${appointment.id}-${appointment.date}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "agendamentos",
+          filter: `data_agendamento=eq.${appointment.date}`,
+        },
+        () => void fetchOccupiedTimes(),
+      )
+      .subscribe();
     return () => {
       active = false;
+      window.clearInterval(refreshInterval);
+      void getSupabaseClient().removeChannel(channel);
     };
   }, [appointment.date, appointment.id, onAvailabilityChange, open, retry]);
 
@@ -151,14 +177,6 @@ function AppointmentFields({
     other.time === appointment.time &&
     Boolean(appointment.date && appointment.time),
   );
-  const blockedTimes = allTimes.filter((time) =>
-    occupiedTimes.includes(time) ||
-    Boolean(date && isTimeInPast(date, time)) ||
-    appointments.some((other) =>
-      other.id !== appointment.id && other.date === appointment.date && other.time === time,
-    ),
-  );
-
   const occupiedSelectedTime = Boolean(appointment.time && occupiedTimes.includes(appointment.time));
 
   return (
@@ -224,9 +242,9 @@ function AppointmentFields({
           />
           {date && (
             <div className="booking-appointment__times">
-              <label className="booking-native-field" htmlFor={`booking-time-${appointment.id}`}>
+              <p className="booking-native-field">
                 Horário — {format(date, "dd/MM/yyyy")}
-              </label>
+              </p>
               {availabilityLoading ? (
                 <div className="booking-loading" role="status"><span /> Consultando disponibilidade...</div>
               ) : availabilityError ? (
@@ -238,24 +256,50 @@ function AppointmentFields({
                 </div>
               ) : (
                 <>
-                  <input
-                    className="booking-native-input"
-                    id={`booking-time-${appointment.id}`}
-                    type="time"
-                    min="08:00"
-                    max="18:00"
-                    step={900}
-                    value={appointment.time}
-                    onChange={(event) => onChange(appointment.id, { time: event.target.value })}
-                    required
-                    disabled={submitting}
-                    aria-label={`Horário do agendamento ${index + 1}`}
-                    aria-invalid={occupiedSelectedTime}
+                  <div
+                    className="booking-time-options"
+                    role="group"
+                    aria-label={`Horários para ${format(date, "dd/MM/yyyy")}`}
+                    aria-required="true"
                     aria-describedby={`booking-time-hint-${appointment.id}`}
-                  />
+                    aria-invalid={occupiedSelectedTime || undefined}
+                  >
+                    {allTimes.map((time) => {
+                      const isReserved = occupiedTimes.includes(time);
+                      const isSelectedElsewhere = appointments.some((other) =>
+                        other.id !== appointment.id &&
+                        other.date === appointment.date &&
+                        other.time === time,
+                      );
+                      const isPast = Boolean(date && isTimeInPast(date, time));
+                      const disabled = isReserved || isSelectedElsewhere || isPast || submitting;
+                      const label = isReserved
+                        ? `${time} · Reservado`
+                        : isSelectedElsewhere
+                          ? `${time} · Selecionado`
+                          : isPast
+                            ? `${time} · Indisponível`
+                            : time;
+
+                      return (
+                        <button
+                          className={`booking-time-option${appointment.time === time ? " is-selected" : ""}${isReserved ? " is-reserved" : ""}`}
+                          type="button"
+                          key={time}
+                          disabled={disabled}
+                          aria-pressed={appointment.time === time}
+                          aria-label={label}
+                          onClick={() => onChange(appointment.id, { time })}
+                        >
+                          <span>{time}</span>
+                          {isReserved && <small>Reservado</small>}
+                          {!isReserved && isSelectedElsewhere && <small>Selecionado</small>}
+                        </button>
+                      );
+                    })}
+                  </div>
                   <p className="booking-modal__hint" id={`booking-time-hint-${appointment.id}`}>
-                    Atendimento das 08:00 às 18:00. Sugestões livres:{" "}
-                    {allTimes.filter((time) => !blockedTimes.includes(time)).join(", ") || "nenhuma"}.
+                    Escolha um horário entre 08:00 e 18:00, em intervalos de 30 minutos.
                   </p>
                 </>
               )}

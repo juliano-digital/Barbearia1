@@ -1232,6 +1232,60 @@ p {
   text-transform: capitalize;
 }
 
+.booking-time-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.booking-time-option {
+  display: grid;
+  min-height: 48px;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 7px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+.booking-time-option:hover:not(:disabled) {
+  border-color: var(--color-primary);
+  background: rgb(201 130 43 / 9%);
+}
+
+.booking-time-option.is-selected {
+  border-color: var(--color-accent);
+  background: rgb(201 130 43 / 18%);
+  color: var(--color-accent);
+}
+
+.booking-time-option small {
+  color: var(--color-text-muted);
+  font-size: 0.62rem;
+  line-height: 1.2;
+}
+
+.booking-time-option.is-reserved,
+.booking-time-option:disabled {
+  border-color: #39342e;
+  background: #171614;
+  color: #817a71;
+  cursor: not-allowed;
+  opacity: 0.78;
+}
+
+.booking-time-option.is-reserved small {
+  color: #c58b7e;
+}
+
 .booking-appointment__error {
   margin: 12px 0 0;
   color: #f0aaa0;
