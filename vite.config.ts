@@ -19,6 +19,7 @@ export default defineConfig({
         "icon/iconbrasa180.png",
       ],
       manifest: {
+        id: "./",
         name: "Brasa Barbearia",
         short_name: "Brasa",
         description:
@@ -28,7 +29,7 @@ export default defineConfig({
         scope: "./",
         display: "standalone",
         orientation: "portrait",
-        theme_color: "#111110",
+        theme_color: "#c9822b",
         background_color: "#111110",
         icons: [
           {

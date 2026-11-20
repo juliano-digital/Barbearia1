@@ -53,21 +53,26 @@ export default function PwaExperience() {
     !dismissed && !installed && (installPrompt !== null || isAppleMobile);
 
   useEffect(() => {
-    function handleInstallPrompt(event: Event) {
-      event.preventDefault();
+    function handleInstallPrompt() {
+      const event = window.brasaInstallPromptEvent;
+      if (!event) return;
+
       setInstallPrompt(event as BeforeInstallPromptEvent);
+      window.brasaInstallPromptEvent = undefined;
     }
 
     function handleAppInstalled() {
       setInstallPrompt(null);
       setInstalled(true);
+      window.brasaInstallPromptEvent = undefined;
     }
 
-    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    window.addEventListener("brasa-install-prompt", handleInstallPrompt);
     window.addEventListener("appinstalled", handleAppInstalled);
+    handleInstallPrompt();
 
     return () => {
-      window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+      window.removeEventListener("brasa-install-prompt", handleInstallPrompt);
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
