@@ -14,6 +14,7 @@ import {
   readBookingReceiptContact,
 } from "./lib/bookingStorage";
 import { getSupabaseClient } from "./lib/supabase";
+import PwaExperience from "./components/PwaExperience";
 
 const BookingSuccessPage = lazy(() => import("./BookingSuccessPage"));
 
@@ -665,6 +666,7 @@ function SiteApp() {
 export default function App() {
   return (
     <HashRouter>
+      <PwaExperience />
       <Routes>
         <Route path="/admin/login" element={<AdminPage />} />
         <Route path="/admin" element={<AdminPage />} />
